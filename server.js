@@ -22,7 +22,8 @@ const argOf = (name, fallback) => {
 const PORT = parseInt(argOf('port', process.env.PORT || '8080'), 10);
 const CONTROL_KEY = argOf('key', process.env.LB_KEY || '') || '';
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const DATA_FILE = path.join(__dirname, 'data.json');
+// --data lets you keep separate boards (e.g. one file per tournament).
+const DATA_FILE = path.resolve(__dirname, argOf('data', process.env.LB_DATA || 'data.json'));
 
 /* ------------------------------------------------------------------ state */
 
@@ -44,6 +45,7 @@ const DEFAULT_STATE = {
     numbersRoll: true,
     joinOpen: true,           // players may add themselves at /join
     joinUpper: false,         // force imported/joined names to UPPERCASE
+    quickSteps: [100],        // amounts the control panel's +/- buttons add
   },
   players: [],
   rev: 0,
@@ -90,6 +92,11 @@ function normalize(raw) {
     cycle: { ...DEFAULT_STATE.settings.cycle, ...((s.settings || {}).cycle || {}) },
   };
   settings.maxRows = clamp(parseInt(settings.maxRows, 10) || 10, 1, 50);
+  settings.quickSteps = (Array.isArray(settings.quickSteps) ? settings.quickSteps : [])
+    .map((n) => clamp(num(n), 1, 1_000_000))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (!settings.quickSteps.length) settings.quickSteps = [100];
   settings.scale = clamp(Number(settings.scale) || 1, 0.4, 3);
   settings.speed = clamp(Number(settings.speed) || 1, 0.25, 4);
 

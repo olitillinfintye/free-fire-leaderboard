@@ -66,7 +66,24 @@
 
   const tbody = $('#players');
 
+  const steps = () => (state.settings.quickSteps?.length ? state.settings.quickSteps : [100]);
+
+  /** Buttons read −500 −100 +100 +500: subtract on the left, add on the right. */
+  function quickButtons() {
+    const asc = [...steps()].sort((a, b) => a - b);
+    const btn = (n) =>
+      `<button class="btn qk" data-d="${n}">${n < 0 ? '−' : '+'}${Math.abs(n)}</button>`;
+    return [...asc].reverse().map((n) => btn(-n)).concat(asc.map(btn)).join('');
+  }
+
+  /** Both the header and the rows are separate grids, so the Quick column needs
+   *  a shared explicit width or they drift apart as buttons are added. */
+  function sizeQuickColumn() {
+    document.documentElement.style.setProperty('--quick-w', 152 + (steps().length - 1) * 76 + 'px');
+  }
+
   function renderPlayers() {
+    sizeQuickColumn();
     const list = ordered();
     $('#empty').style.display = list.length ? 'none' : 'block';
     tbody.innerHTML = '';
@@ -85,8 +102,7 @@
         <input class="f-team" value="" placeholder="—" />
         <input class="f-score" type="number" />
         <div class="quick">
-          <button class="btn qk" data-d="-100">−100</button>
-          <button class="btn qk" data-d="100">+100</button>
+          ${quickButtons()}
           <button class="star ${p.highlight ? 'on' : ''}" title="Highlight">★</button>
           <button class="skull ${p.eliminated ? 'on' : ''}" title="Eliminated">💀</button>
         </div>
@@ -252,6 +268,7 @@
   function fillSettings() {
     const s = state.settings;
     for (const [id, key] of Object.entries(S)) $('#' + id).value = s[key];
+    $('#sQuickSteps').value = steps().join(', ');
     for (const [id, key] of Object.entries(CHK)) $('#' + id).checked = !!s[key];
     for (const [id, key] of Object.entries(COLS)) $('#' + id).checked = !!s.columns[key];
     $('#sCycle').checked = !!s.cycle.enabled;
@@ -287,6 +304,21 @@
         push({ instant: true });
       });
     }
+    // Typed one digit at a time, so ignore states that parse to nothing rather
+    // than snapping the buttons back to the default mid-edit.
+    $('#sQuickSteps').addEventListener('input', (e) => {
+      const parsed = e.target.value
+        .split(/[,\s]+/)
+        .map((t) => parseInt(t, 10))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .slice(0, 4);
+      if (!parsed.length) return;
+      state.settings.quickSteps = parsed;
+      renderPlayers();
+      push();
+    });
+    $('#sQuickSteps').addEventListener('blur', () => { $('#sQuickSteps').value = steps().join(', '); });
+
     $('#sCycle').addEventListener('change', (e) => {
       state.settings.cycle.enabled = e.target.checked;
       document.querySelector('.cycle-only').classList.toggle('on', e.target.checked);

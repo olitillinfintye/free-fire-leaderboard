@@ -49,8 +49,9 @@
     </div>
 
     <div class="hintbar">
-      Ranks re-sort themselves the moment a score goes higher · <b>+100 / −100</b> quick buttons ·
-      click ★ to highlight a row · 💀 marks eliminated · drag <b>⠿</b> to reorder (auto-sort off)
+      Ranks re-sort themselves the moment a score goes higher · set your own <b>+ / −</b> amounts
+      under Board · click ★ to highlight a row · 💀 marks eliminated · drag <b>⠿</b> to reorder
+      (auto-sort off)
     </div>
   </section>
 
@@ -109,6 +110,12 @@
         <label class="f"><span>Subtitle</span><input id="sSubtitle" /></label>
 
         <label class="f"><span>Visible rows</span><input id="sMaxRows" type="number" min="1" max="50" /></label>
+
+        <label class="f"><span>Quick score buttons</span>
+          <input id="sQuickSteps" type="text" inputmode="numeric" placeholder="100" />
+          <em class="hint">The amount each <b>+</b> / <b>−</b> button adds. Comma-separate for
+            several, e.g. <b>50, 100, 500</b>.</em>
+        </label>
 
         <div class="f f--row">
           <span>Extra columns</span>
