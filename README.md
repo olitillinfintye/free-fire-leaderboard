@@ -3,6 +3,8 @@
 An animated leaderboard you control from a web page while it updates **live** inside OBS.
 Ranks re-sort themselves the moment a score goes higher. Zero dependencies — just Node.js.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/olitillinfintye/free-fire-leaderboard)
+
 ---
 
 ## Run it locally
@@ -72,10 +74,9 @@ Example: `http://localhost:8080/overlay?scale=1.2&rows=5&align=left`
 
 The repo ships a `render.yaml` blueprint, so Render sets everything up for you.
 
-1. Go to **[dashboard.render.com/select-repo?type=blueprint](https://dashboard.render.com/select-repo?type=blueprint)**
-2. Pick this repository → **Connect**
-3. Render reads `render.yaml` and asks for one value: **`LB_KEY`**. Type any password you like.
-4. **Apply** — it builds in under a minute.
+1. Click **[Deploy to Render](https://render.com/deploy?repo=https://github.com/olitillinfintye/free-fire-leaderboard)** (sign in with GitHub if you haven't)
+2. Render reads `render.yaml` and asks for one value: **`LB_KEY`**. Type any password you like — that's what protects your control panel.
+3. **Apply** — it builds in under a minute. There's nothing to install, so the build is instant.
 
 You get a URL like `https://free-fire-leaderboard.onrender.com`:
 
