@@ -151,13 +151,22 @@ Any host that runs a persistent Node process works — Railway, Fly.io, a VPS. I
 `PORT` and `LB_KEY` from the environment. Serverless platforms (Vercel, Netlify,
 GitHub Pages) will **not** work: SSE needs a connection that stays open.
 
-### Or keep it local and tunnel
+### Or go live from your own PC in one click
 
-```bash
-npx cloudflared tunnel --url http://localhost:8080
+Double-click **`deploy.bat`** (or `node tools/deploy.js`). It starts the server with a
+control key, opens a Cloudflare tunnel, and prints your three links:
+
+```
+OBS overlay    https://….trycloudflare.com/overlay
+Player sign-up https://….trycloudflare.com/join
+Your controls  https://….trycloudflare.com/?key=…
 ```
 
-Prints a public `https://…trycloudflare.com` URL — add `/overlay` for OBS.
+They're also saved to `public-url.txt`. The key is generated once and kept in `.lbkey`,
+so your control-panel bookmark keeps working between runs. Ctrl+C stops everything.
+
+Needs no account, but the **address changes every restart**, and it only runs while your
+PC is on. For a fixed address, use Render above.
 
 ## Locking the controls
 
@@ -180,7 +189,9 @@ public/overlay.html   the OBS overlay
 public/join.html      player sign-up page
 public/names.js       name formatting + CSV parsing (shared by server and pages)
 tools/test-names.js   tests for the above — `node tools/test-names.js`
+tools/deploy.js       starts the server + a public tunnel, prints the links
 start.bat             one-click local launcher
+deploy.bat            one-click public launcher
 ```
 
 Other flags: `node server.js --port 9000`

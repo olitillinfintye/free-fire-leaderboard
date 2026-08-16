@@ -8,3 +8,5 @@ Thumbs.db
 server.log
 tunnel.log
 scratch-board.json
+.lbkey
+public-url.txt
