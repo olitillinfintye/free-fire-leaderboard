@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0a0d12" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Admin sign-in</title>
+<link rel="stylesheet" href="/login.css" />
+</head>
+<body>
+<main class="wrap">
+  <form class="card" id="form" autocomplete="off">
+    <div class="card__glow"></div>
+
+    <svg class="lock" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="10" width="16" height="11" rx="2"/>
+      <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+    </svg>
+
+    <h1>ADMIN ONLY</h1>
+    <p class="sub">Enter the control password to open the dashboard.</p>
+
+    <input id="key" type="password" placeholder="Password" autocomplete="current-password"
+           autofocus required />
+    <button id="go" type="submit">SIGN IN</button>
+    <p class="error" id="error" role="alert"></p>
+
+    <p class="foot">
+      Looking for the leaderboard? The <a href="/overlay">overlay</a> and the
+      <a href="/join">player sign-up</a> are open to everyone.
+    </p>
+  </form>
+</main>
+<script src="/login.js"></script>
+</body>
+</html>

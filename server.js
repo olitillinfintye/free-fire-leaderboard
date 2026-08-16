@@ -274,11 +274,69 @@ function readBody(req, limit = 1_000_000) {
   });
 }
 
-/** Writes are gated only when the server was started with --key. */
+/* ------------------------------------------------------------- admin auth */
+
+const COOKIE = 'lb_admin';
+
+function cookies(req) {
+  const out = {};
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+/** Constant-time compare, via hashes so lengths always match. */
+function keyOk(given) {
+  const a = crypto.createHash('sha256').update(String(given ?? '')).digest();
+  const b = crypto.createHash('sha256').update(CONTROL_KEY).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** The dashboard and every write are admin-only whenever a key is configured.
+ *  The overlay and the player sign-up page stay open by design. */
 function authorized(req, url) {
   if (!CONTROL_KEY) return true;
-  const given = req.headers['x-lb-key'] || url.searchParams.get('key') || '';
-  return given === CONTROL_KEY;
+  const given =
+    req.headers['x-lb-key'] ||
+    url.searchParams.get('key') ||
+    cookies(req)[COOKIE] ||
+    '';
+  return keyOk(given);
+}
+
+const isHttps = (req) =>
+  String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+
+function sessionCookie(req) {
+  return [
+    `${COOKIE}=${encodeURIComponent(CONTROL_KEY)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=' + 60 * 60 * 24 * 30,
+    isHttps(req) ? 'Secure' : '',
+  ].filter(Boolean).join('; ');
+}
+
+/** Slow down password guessing from a single address. */
+const loginTries = new Map();   // ip -> [timestamps]
+const LOGIN_WINDOW_MS = 10 * 60e3;
+const LOGIN_MAX = 10;
+
+function loginThrottled(ip) {
+  const now = Date.now();
+  const hits = (loginTries.get(ip) || []).filter((t) => now - t < LOGIN_WINDOW_MS);
+  loginTries.set(ip, hits);
+  if (loginTries.size > 5000) loginTries.clear();
+  return hits.length >= LOGIN_MAX;
+}
+function noteLoginTry(ip) {
+  const hits = loginTries.get(ip) || [];
+  hits.push(Date.now());
+  loginTries.set(ip, hits);
 }
 
 function serveStatic(req, res, urlPath) {
@@ -332,8 +390,46 @@ const server = http.createServer(async (req, res) => {
 
   if (p === '/api/state' && req.method === 'GET') return sendJSON(res, 200, projected());
 
+  // Everything the dashboard needs to boot — admin only.
   if (p === '/api/raw' && req.method === 'GET') {
+    if (!authorized(req, url)) return sendJSON(res, 401, { error: 'not signed in' });
     return sendJSON(res, 200, { ...state, needsKey: !!CONTROL_KEY });
+  }
+
+  if (p === '/api/login' && req.method === 'POST') {
+    const ip = clientIp(req);
+    try {
+      if (!CONTROL_KEY) return sendJSON(res, 200, { ok: true });
+      if (loginThrottled(ip)) {
+        return sendJSON(res, 429, { error: 'Too many attempts. Wait a few minutes.' });
+      }
+      const body = await readBody(req, 4_000);
+      if (!keyOk(body.key)) {
+        noteLoginTry(ip);
+        return sendJSON(res, 401, { error: 'Wrong password.' });
+      }
+      loginTries.delete(ip);
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Set-Cookie': sessionCookie(req),
+        'Cache-Control': 'no-store',
+      });
+      return res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+  }
+
+  if (p === '/api/logout' && req.method === 'POST') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+    });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+
+  if (p === '/api/session') {
+    return sendJSON(res, 200, { protected: !!CONTROL_KEY, signedIn: authorized(req, url) });
   }
 
   if (p === '/api/state' && req.method === 'POST') {
@@ -409,8 +505,24 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (p === '/overlay') return serveStatic(req, res, '/overlay.html');
-  if (p === '/control') return serveStatic(req, res, '/control.html');
   if (p === '/join') return serveStatic(req, res, '/join.html');
+
+  // The dashboard itself is admin-only: without a valid key the sign-in page is
+  // served instead, so the controls are never even delivered to the browser.
+  if (p === '/' || p === '/control' || p === '/control.html') {
+    if (!authorized(req, url)) return serveStatic(req, res, '/login.html');
+    // A key in the URL becomes a session cookie so it can be dropped from the
+    // address bar and doesn't linger in history or a screen share.
+    if (CONTROL_KEY && url.searchParams.get('key')) {
+      res.setHeader('Set-Cookie', sessionCookie(req));
+    }
+    return serveStatic(req, res, '/control.html');
+  }
+
+  // Dashboard-only assets stay behind the same gate.
+  if (p === '/control.js' || p === '/control.css') {
+    if (!authorized(req, url)) { res.writeHead(404).end('404 — not found'); return; }
+  }
 
   return serveStatic(req, res, p);
 });
@@ -497,7 +609,15 @@ server.listen(PORT, '0.0.0.0', () => {
       console.log(`    join  \x1b[35mhttp://${a}:${PORT}/join\x1b[0m`);
     }
   }
-  if (CONTROL_KEY) console.log(`\n  Control key required: append ?key=${CONTROL_KEY} to the control panel URL`);
+  if (CONTROL_KEY) {
+    console.log('');
+    console.log('  \x1b[32mDashboard is admin-only\x1b[0m — it asks for the password at sign-in.');
+    console.log(`  Password: \x1b[33m${CONTROL_KEY}\x1b[0m`);
+  } else {
+    console.log('');
+    console.log('  \x1b[31m! The dashboard is UNPROTECTED\x1b[0m — anyone who can reach this server can edit it.');
+    console.log('    Start with \x1b[33mnode server.js --key yourpassword\x1b[0m to lock it down.');
+  }
   console.log('\n  Press Ctrl+C to stop.\n');
 });
 

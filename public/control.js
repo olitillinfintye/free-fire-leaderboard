@@ -31,6 +31,7 @@
           headers: { 'Content-Type': 'application/json', ...(KEY ? { 'X-LB-Key': KEY } : {}) },
           body: JSON.stringify({ settings: state.settings, players: state.players }),
         });
+        if (res.status === 401) { location.replace('/'); return; }   // signed out elsewhere
         if (!res.ok) throw new Error((await res.json()).error || res.statusText);
         dirty = false;
         setChip('saved', 'chip--ok');
@@ -412,6 +413,12 @@
   });
 
   $('#btnReplay').addEventListener('click', () => action('replay'));
+
+  $('#btnLogout').addEventListener('click', async () => {
+    if (dirty && !confirm('There are unsaved changes. Sign out anyway?')) return;
+    await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    location.replace('/');
+  });
 
   $('#btnPopout').addEventListener('click', () => window.open('/overlay?bg=1', '_blank', 'width=1280,height=720'));
 
@@ -890,10 +897,16 @@
   });
 
   (async function boot() {
-    const raw = await (await fetch('/api/raw')).json();
+    const res = await fetch('/api/raw', { cache: 'no-store' });
+    if (res.status === 401) { location.replace('/'); return; }   // session expired
+    const raw = await res.json();
+
     state = { settings: raw.settings, players: raw.players };
-    if (raw.needsKey && !KEY) {
-      setChip('key required — add ?key=… to the URL', 'chip--err');
+
+    if (raw.needsKey) {
+      $('#btnLogout').hidden = false;
+      // Signing in stored a cookie, so the key doesn't need to sit in the URL.
+      if (KEY) history.replaceState(null, '', location.pathname);
     }
     fillSettings();
     wireSettings();

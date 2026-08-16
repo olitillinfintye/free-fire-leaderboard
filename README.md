@@ -168,15 +168,27 @@ so your control-panel bookmark keeps working between runs. Ctrl+C stops everythi
 Needs no account, but the **address changes every restart**, and it only runs while your
 PC is on. For a fixed address, use Render above.
 
-## Locking the controls
+## Admin access
 
 ```bash
 node server.js --key mysecret
 ```
 
-or set `LB_KEY=mysecret` in the environment. The control panel then needs
-`?key=mysecret`. The overlay and the player sign-up page stay open on purpose — OBS
-never needs a key, and neither do your players.
+or set `LB_KEY=mysecret` in the environment. `deploy.bat` does this for you.
+
+With a key set, the **dashboard is admin-only**: anyone opening the site gets a sign-in
+page, and the control panel's markup, scripts and data are never sent to a browser that
+hasn't signed in. Signing in stores an HttpOnly session cookie for 30 days, so the
+password stays out of the address bar. There's a **Sign out** button in the top bar, and
+wrong passwords are throttled to 10 attempts per 10 minutes per address.
+
+`?key=…` links still work and quietly upgrade themselves to a cookie.
+
+Deliberately left open: the **overlay** (OBS can't sign in) and the **player sign-up
+page** (that's the point of it). Both are read-only or rate-limited.
+
+> Without `--key` the dashboard is unprotected and the server says so at startup. That's
+> fine on your own machine; never do it on a public address.
 
 ## Files
 
