@@ -12,6 +12,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { formatPlayerName } = require('./public/names.js');
+const { Users, ROLES } = require('./lib/users.js');
 
 const argv = process.argv.slice(2);
 const argOf = (name, fallback) => {
@@ -274,9 +275,14 @@ function readBody(req, limit = 1_000_000) {
   });
 }
 
-/* ------------------------------------------------------------- admin auth */
+/* ------------------------------------------------------------ accounts */
 
-const COOKIE = 'lb_admin';
+const COOKIE = 'lb_session';
+const users = new Users(path.resolve(__dirname, argOf('users', process.env.LB_USERS || 'users.json')));
+
+// First run: seed an admin. Its password is --key when given, otherwise random
+// and printed once at startup.
+const seeded = users.bootstrap(CONTROL_KEY);
 
 function cookies(req) {
   const out = {};
@@ -288,37 +294,76 @@ function cookies(req) {
   return out;
 }
 
-/** Constant-time compare, via hashes so lengths always match. */
-function keyOk(given) {
-  const a = crypto.createHash('sha256').update(String(given ?? '')).digest();
+/** Constant-time compare for the legacy shared key. */
+function legacyKeyOk(given) {
+  if (!CONTROL_KEY || !given) return false;
+  const a = crypto.createHash('sha256').update(String(given)).digest();
   const b = crypto.createHash('sha256').update(CONTROL_KEY).digest();
   return crypto.timingSafeEqual(a, b);
 }
 
-/** The dashboard and every write are admin-only whenever a key is configured.
- *  The overlay and the player sign-up page stay open by design. */
+/** Who is making this request? Returns a user-ish object or null.
+ *  --key still works as an admin so deploy links and scripts keep running. */
+function currentUser(req, url) {
+  const session = cookies(req)[COOKIE];
+  const viaCookie = users.fromToken(session);
+  if (viaCookie) return viaCookie;
+
+  const given = req.headers['x-lb-key'] || url.searchParams.get('key') || '';
+  if (legacyKeyOk(given)) {
+    return { id: 'legacy-key', username: 'admin', name: 'Admin (key)', role: 'admin' };
+  }
+  return null;
+}
+
+const capsOf = (user) => (user ? (ROLES[user.role] || ROLES.scorer).caps : []);
+const can = (user, cap) => capsOf(user).includes(cap);
+
+/** Anyone signed in may open the dashboard; what they see is role-dependent. */
 function authorized(req, url) {
-  if (!CONTROL_KEY) return true;
-  const given =
-    req.headers['x-lb-key'] ||
-    url.searchParams.get('key') ||
-    cookies(req)[COOKIE] ||
-    '';
-  return keyOk(given);
+  return !!currentUser(req, url);
 }
 
 const isHttps = (req) =>
   String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
 
-function sessionCookie(req) {
+function sessionCookie(req, token) {
   return [
-    `${COOKIE}=${encodeURIComponent(CONTROL_KEY)}`,
+    `${COOKIE}=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     'Max-Age=' + 60 * 60 * 24 * 30,
     isHttps(req) ? 'Secure' : '',
   ].filter(Boolean).join('; ');
+}
+
+/** Apply only the parts of an update this role is allowed to change.
+ *  The UI hides what you can't use; this is what actually enforces it. */
+function mergeAllowed(body, user) {
+  const nextSettings = { ...state.settings };
+  const nextPlayers = can(user, 'players') && Array.isArray(body.players)
+    ? body.players
+    : state.players;
+
+  const incoming = body.settings || {};
+
+  if (can(user, 'board')) {
+    Object.assign(nextSettings, incoming);
+    // Effects are a show control, not a board setting.
+    if (!can(user, 'effects')) nextSettings.effects = state.settings.effects;
+  } else {
+    if (can(user, 'effects')) {
+      if ('effects' in incoming) nextSettings.effects = incoming.effects;
+      if ('visible' in incoming) nextSettings.visible = incoming.visible;
+    }
+    // Scorers own the shortcut buttons they use all match.
+    if (can(user, 'players') && 'quickSteps' in incoming) {
+      nextSettings.quickSteps = incoming.quickSteps;
+    }
+  }
+
+  return { settings: nextSettings, players: nextPlayers };
 }
 
 /** Slow down password guessing from a single address. */
@@ -399,22 +444,22 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/login' && req.method === 'POST') {
     const ip = clientIp(req);
     try {
-      if (!CONTROL_KEY) return sendJSON(res, 200, { ok: true });
       if (loginThrottled(ip)) {
         return sendJSON(res, 429, { error: 'Too many attempts. Wait a few minutes.' });
       }
       const body = await readBody(req, 4_000);
-      if (!keyOk(body.key)) {
+      const user = users.authenticate(body.username, body.password);
+      if (!user) {
         noteLoginTry(ip);
-        return sendJSON(res, 401, { error: 'Wrong password.' });
+        return sendJSON(res, 401, { error: 'Wrong username or password.' });
       }
       loginTries.delete(ip);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
-        'Set-Cookie': sessionCookie(req),
+        'Set-Cookie': sessionCookie(req, users.sign(user)),
         'Cache-Control': 'no-store',
       });
-      return res.end(JSON.stringify({ ok: true }));
+      return res.end(JSON.stringify({ ok: true, user: users.publicView(user) }));
     } catch (e) {
       return sendJSON(res, 400, { error: String(e.message || e) });
     }
@@ -428,15 +473,97 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ ok: true }));
   }
 
-  if (p === '/api/session') {
-    return sendJSON(res, 200, { protected: !!CONTROL_KEY, signedIn: authorized(req, url) });
+  /* ---- who am I, and what may I do ---- */
+
+  if (p === '/api/me' && req.method === 'GET') {
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    return sendJSON(res, 200, {
+      user: { id: me.id, username: me.username, name: me.name, role: me.role },
+      caps: capsOf(me),
+      roles: ROLES,
+    });
+  }
+
+  if (p === '/api/me/profile' && req.method === 'POST') {
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (me.id === 'legacy-key') return sendJSON(res, 400, { error: 'Sign in with an account to edit a profile.' });
+    try {
+      const body = await readBody(req, 4_000);
+      const updated = users.update(me.id, { name: body.name, username: body.username });
+      return sendJSON(res, 200, { ok: true, user: updated });
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+  }
+
+  if (p === '/api/me/password' && req.method === 'POST') {
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (me.id === 'legacy-key') return sendJSON(res, 400, { error: 'Sign in with an account to change a password.' });
+    try {
+      const body = await readBody(req, 4_000);
+      if (!Users.verifyPassword(body.current, me.salt, me.hash)) {
+        return sendJSON(res, 401, { error: 'Your current password is wrong.' });
+      }
+      users.update(me.id, { password: body.next });
+      // Re-issue so this browser stays signed in after the change.
+      const fresh = users.byId(me.id);
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Set-Cookie': sessionCookie(req, users.sign(fresh)),
+      });
+      return res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+  }
+
+  /* ---- account management, admins only ---- */
+
+  if (p.startsWith('/api/users')) {
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (!can(me, 'users')) return sendJSON(res, 403, { error: 'Admins only.' });
+
+    try {
+      if (p === '/api/users' && req.method === 'GET') {
+        return sendJSON(res, 200, { users: users.list(), roles: ROLES });
+      }
+      if (p === '/api/users' && req.method === 'POST') {
+        const body = await readBody(req, 4_000);
+        return sendJSON(res, 200, { ok: true, user: users.create(body) });
+      }
+      if (p === '/api/users/update' && req.method === 'POST') {
+        const body = await readBody(req, 4_000);
+        if (body.id === me.id && body.role && body.role !== me.role) {
+          return sendJSON(res, 400, { error: 'You cannot change your own role.' });
+        }
+        const { id, ...patch } = body;
+        return sendJSON(res, 200, { ok: true, user: users.update(id, patch, { actingAdmin: true }) });
+      }
+      if (p === '/api/users/delete' && req.method === 'POST') {
+        const body = await readBody(req, 4_000);
+        if (body.id === me.id) return sendJSON(res, 400, { error: 'You cannot delete your own account.' });
+        users.remove(body.id);
+        return sendJSON(res, 200, { ok: true });
+      }
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+    return sendJSON(res, 404, { error: 'unknown endpoint' });
   }
 
   if (p === '/api/state' && req.method === 'POST') {
-    if (!authorized(req, url)) return sendJSON(res, 401, { error: 'bad key' });
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (!can(me, 'players') && !can(me, 'board') && !can(me, 'effects')) {
+      return sendJSON(res, 403, { error: 'Your role cannot change the board.' });
+    }
     try {
       const body = await readBody(req);
-      state = normalize({ ...state, ...body, rev: state.rev + 1 });
+      state = normalize({ ...state, ...mergeAllowed(body, me), rev: state.rev + 1 });
       save();
       pushState();
       return sendJSON(res, 200, { ok: true, rev: state.rev });
@@ -447,7 +574,9 @@ const server = http.createServer(async (req, res) => {
 
   // Fire-and-forget overlay effects: booyah, flash a row, replay the intro.
   if (p === '/api/action' && req.method === 'POST') {
-    if (!authorized(req, url)) return sendJSON(res, 401, { error: 'bad key' });
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (!can(me, 'effects')) return sendJSON(res, 403, { error: 'Your role cannot run show effects.' });
     try {
       const body = await readBody(req, 20_000);
       lastAction = {
@@ -490,7 +619,9 @@ const server = http.createServer(async (req, res) => {
   // Pulls a Google Sheet (a Form's response sheet) server-side, which dodges
   // the CORS wall the browser would hit.
   if (p === '/api/import/sheet' && req.method === 'POST') {
-    if (!authorized(req, url)) return sendJSON(res, 401, { error: 'bad key' });
+    const me = currentUser(req, url);
+    if (!me) return sendJSON(res, 401, { error: 'not signed in' });
+    if (!can(me, 'players')) return sendJSON(res, 403, { error: 'Your role cannot import players.' });
     try {
       const body = await readBody(req, 4_000);
       const csv = await fetchSheetCsv(String(body.url || ''));
@@ -513,8 +644,9 @@ const server = http.createServer(async (req, res) => {
     if (!authorized(req, url)) return serveStatic(req, res, '/login.html');
     // A key in the URL becomes a session cookie so it can be dropped from the
     // address bar and doesn't linger in history or a screen share.
-    if (CONTROL_KEY && url.searchParams.get('key')) {
-      res.setHeader('Set-Cookie', sessionCookie(req));
+    const me = currentUser(req, url);
+    if (me && me.id !== 'legacy-key' && url.searchParams.get('key')) {
+      res.setHeader('Set-Cookie', sessionCookie(req, users.sign(me)));
     }
     return serveStatic(req, res, '/control.html');
   }
@@ -609,14 +741,17 @@ server.listen(PORT, '0.0.0.0', () => {
       console.log(`    join  \x1b[35mhttp://${a}:${PORT}/join\x1b[0m`);
     }
   }
-  if (CONTROL_KEY) {
+  console.log('');
+  console.log('  \x1b[32mThe dashboard needs a sign-in.\x1b[0m Accounts live in users.json.');
+  if (seeded) {
     console.log('');
-    console.log('  \x1b[32mDashboard is admin-only\x1b[0m — it asks for the password at sign-in.');
-    console.log(`  Password: \x1b[33m${CONTROL_KEY}\x1b[0m`);
+    console.log('  \x1b[33m┌─ first run — your admin account ─────────────┐\x1b[0m');
+    console.log(`  \x1b[33m│\x1b[0m  username: \x1b[36m${seeded.username}\x1b[0m`);
+    console.log(`  \x1b[33m│\x1b[0m  password: \x1b[36m${CONTROL_KEY || '(printed once above)'}\x1b[0m`);
+    console.log('  \x1b[33m└──────────────────────────────────────────────┘\x1b[0m');
+    console.log('  Change it under \x1b[36mProfile\x1b[0m once you are in.');
   } else {
-    console.log('');
-    console.log('  \x1b[31m! The dashboard is UNPROTECTED\x1b[0m — anyone who can reach this server can edit it.');
-    console.log('    Start with \x1b[33mnode server.js --key yourpassword\x1b[0m to lock it down.');
+    console.log(`  ${users.list().length} account(s). Sign in at the control panel.`);
   }
   console.log('\n  Press Ctrl+C to stop.\n');
 });

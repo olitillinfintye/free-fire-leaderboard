@@ -10,3 +10,5 @@ tunnel.log
 scratch-board.json
 .lbkey
 public-url.txt
+users.json
+scratch-users.json

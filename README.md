@@ -168,27 +168,43 @@ so your control-panel bookmark keeps working between runs. Ctrl+C stops everythi
 Needs no account, but the **address changes every restart**, and it only runs while your
 PC is on. For a fixed address, use Render above.
 
-## Admin access
+## Accounts and roles
+
+The dashboard needs a sign-in. On first run an **admin** account is created — username
+`admin`, password from `--key` (or a random one printed once at startup). Change it under
+**Profile** straight away.
+
+Give each person on your team their own login under **Team → Manage accounts**:
+
+| Role | Can do | Cannot |
+|---|---|---|
+| **Admin** | Everything, plus manage accounts | — |
+| **Score adder** | Add players, edit scores, import, search, set the quick buttons | Board settings, effects, accounts |
+| **Supervisor** | Run show effects, edit effects, hide/show the overlay | Scores, players, board settings, accounts |
+
+Roles are enforced **on the server**, not just hidden in the UI. A score adder who edits
+the page and posts a payload changing the title, theme or effects gets a `200` — and the
+board keeps its old values, because only the fields their role owns are applied. There's
+a test suite for exactly this:
 
 ```bash
-node server.js --key mysecret
+node tools/test-roles.js
 ```
 
-or set `LB_KEY=mysecret` in the environment. `deploy.bat` does this for you.
+**Profile** (click your name, top right) is where anyone changes their own display name,
+username and password. Admins can reset anyone's password from the Team dialog, which
+also signs that person out everywhere.
 
-With a key set, the **dashboard is admin-only**: anyone opening the site gets a sign-in
-page, and the control panel's markup, scripts and data are never sent to a browser that
-hasn't signed in. Signing in stores an HttpOnly session cookie for 30 days, so the
-password stays out of the address bar. There's a **Sign out** button in the top bar, and
-wrong passwords are throttled to 10 attempts per 10 minutes per address.
+Other details: sessions are signed HttpOnly cookies lasting 30 days, so the password
+never sits in the address bar; sign-in attempts are throttled to 10 per 10 minutes per
+address; passwords are stored as scrypt hashes in `users.json` (gitignored, mode 0600);
+accounts can be disabled without deleting them; and you can't demote, disable or delete
+the last admin — or your own account.
 
-`?key=…` links still work and quietly upgrade themselves to a cookie.
+`?key=…` links still work as an admin, so deploy scripts keep running.
 
-Deliberately left open: the **overlay** (OBS can't sign in) and the **player sign-up
-page** (that's the point of it). Both are read-only or rate-limited.
-
-> Without `--key` the dashboard is unprotected and the server says so at startup. That's
-> fine on your own machine; never do it on a public address.
+Deliberately open: the **overlay** (OBS can't sign in) and the **player sign-up page**
+(that's the point of it).
 
 ## Files
 
@@ -199,8 +215,12 @@ data.json             your board, saved automatically (gitignored)
 public/control.html   control panel
 public/overlay.html   the OBS overlay
 public/join.html      player sign-up page
+public/login.html     staff sign-in
 public/names.js       name formatting + CSV parsing (shared by server and pages)
+lib/users.js          accounts, roles and sessions
+users.json            accounts and password hashes (gitignored)
 tools/test-names.js   tests for the above — `node tools/test-names.js`
+tools/test-roles.js   role enforcement tests — `node tools/test-roles.js`
 tools/deploy.js       starts the server + a public tunnel, prints the links
 start.bat             one-click local launcher
 deploy.bat            one-click public launcher

@@ -19,7 +19,14 @@
   <div class="topbar__right">
     <span id="saveState" class="chip chip--ok">saved</span>
     <span id="viewers" class="chip">overlay link ready</span>
-    <button id="btnVisible" class="btn btn--ghost">Hide overlay</button>
+    <button id="btnVisible" class="btn btn--ghost cap-effects">Hide overlay</button>
+    <button id="btnProfile" class="whoami" hidden>
+      <span class="whoami__av" id="whoAv"></span>
+      <span class="whoami__txt">
+        <span class="whoami__name" id="whoName"></span>
+        <span class="whoami__role" id="whoRole"></span>
+      </span>
+    </button>
     <button id="btnLogout" class="btn btn--ghost" hidden>Sign out</button>
   </div>
 </header>
@@ -27,7 +34,7 @@
 <main class="layout">
 
   <!-- ============ left: players ============ -->
-  <section class="panel panel--players">
+  <section class="panel panel--players cap-players">
     <div class="panel__head">
       <h2>Players <span id="playerCount" class="count"></span></h2>
       <div class="row-actions">
@@ -88,7 +95,14 @@
       </div>
     </section>
 
-    <section class="panel panel--join">
+    <section class="panel cap-users">
+      <div class="panel__head"><h2>Team</h2>
+        <button id="btnTeam" class="btn btn--sm">Manage accounts</button>
+      </div>
+      <div class="teamsummary" id="teamSummary"></div>
+    </section>
+
+    <section class="panel panel--join cap-board">
       <div class="panel__head"><h2>Player sign-up</h2>
         <label class="mini-sw"><input type="checkbox" id="sJoinOpen" /> <span>Open</span></label>
       </div>
@@ -107,7 +121,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel cap-effects">
       <div class="panel__head"><h2>Show effects</h2>
         <button id="btnNewFx" class="btn btn--sm">＋ New effect</button>
       </div>
@@ -118,7 +132,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel cap-board">
       <div class="panel__head"><h2>Board</h2></div>
       <div class="fields">
         <label class="f"><span>Title</span><input id="sTitle" /></label>
@@ -149,7 +163,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel cap-board">
       <div class="panel__head"><h2>Look &amp; motion</h2></div>
       <div class="fields">
         <label class="f"><span>Theme</span>
@@ -193,6 +207,72 @@
   <div class="dlg__actions">
     <button id="importCancel" class="btn">Cancel</button>
     <button id="importGo" class="btn btn--gold">Import</button>
+  </div>
+</dialog>
+
+<!-- profile: your own account -->
+<dialog id="dlgProfile" class="dlg">
+  <h3>Your profile</h3>
+  <p id="profileWho" class="profile-who"></p>
+
+  <div class="prof-block">
+    <h4>Login details</h4>
+    <div class="grid2 dlg__cols">
+      <label class="f"><span>Display name</span><input id="profName" maxlength="40" /></label>
+      <label class="f"><span>Username</span><input id="profUser" autocapitalize="none" spellcheck="false" /></label>
+    </div>
+    <div class="dlg__actions dlg__actions--tight">
+      <button id="profSave" class="btn">Save details</button>
+    </div>
+    <p class="ok" id="profOk"></p>
+  </div>
+
+  <div class="prof-block">
+    <h4>Change password</h4>
+    <label class="f"><span>Current password</span>
+      <input id="pwCurrent" type="password" autocomplete="current-password" /></label>
+    <div class="grid2 dlg__cols">
+      <label class="f"><span>New password</span>
+        <input id="pwNext" type="password" autocomplete="new-password" /></label>
+      <label class="f"><span>Repeat it</span>
+        <input id="pwRepeat" type="password" autocomplete="new-password" /></label>
+    </div>
+    <div class="dlg__actions dlg__actions--tight">
+      <button id="pwSave" class="btn btn--gold">Update password</button>
+    </div>
+    <p class="ok" id="pwOk"></p>
+  </div>
+
+  <p class="error" id="profError"></p>
+  <div class="dlg__actions">
+    <button id="profClose" class="btn">Close</button>
+  </div>
+</dialog>
+
+<!-- team: accounts and roles, admin only -->
+<dialog id="dlgTeam" class="dlg dlg--wide">
+  <h3>Team &amp; roles</h3>
+  <p>Give each person their own login. Roles decide which parts of the dashboard they see —
+     and the server enforces it, so a role can't be talked into more than it's allowed.</p>
+
+  <div class="rolekey" id="roleKey"></div>
+
+  <div class="userlist" id="userList"></div>
+
+  <div class="newuser">
+    <h4>Add someone</h4>
+    <div class="newuser__grid">
+      <label class="f"><span>Display name</span><input id="nuName" placeholder="Bereket" /></label>
+      <label class="f"><span>Username</span><input id="nuUser" placeholder="bereket" autocapitalize="none" spellcheck="false" /></label>
+      <label class="f"><span>Password</span><input id="nuPass" type="text" placeholder="give them this" /></label>
+      <label class="f"><span>Role</span><select id="nuRole"></select></label>
+      <button id="nuAdd" class="btn btn--gold">Create</button>
+    </div>
+  </div>
+
+  <p class="error" id="teamError"></p>
+  <div class="dlg__actions">
+    <button id="teamClose" class="btn">Close</button>
   </div>
 </dialog>
 

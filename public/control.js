@@ -10,6 +10,11 @@
 
   let state = { settings: {}, players: [] };
   let dirty = false;
+  let me = null;           // { id, username, name, role }
+  let caps = [];
+  let roles = {};
+
+  const can = (cap) => caps.includes(cap);
 
   /* ------------------------------------------------ transport */
 
@@ -824,6 +829,209 @@
     });
   }
 
+  /* ------------------------------------------------ identity & roles */
+
+  function applyRole() {
+    document.body.classList.toggle('can-players', can('players'));
+    document.body.classList.toggle('can-effects', can('effects'));
+    document.body.classList.toggle('can-board', can('board'));
+    document.body.classList.toggle('can-users', can('users'));
+
+    $('#btnProfile').hidden = false;
+    $('#btnLogout').hidden = false;
+    $('#whoName').textContent = me.name || me.username;
+    $('#whoRole').textContent = roles[me.role]?.label || me.role;
+    $('#whoAv').textContent = (me.name || me.username).trim().charAt(0).toUpperCase();
+  }
+
+  /* ---- profile ---- */
+
+  const dlgProfile = $('#dlgProfile');
+
+  const flash = (sel, msg) => {
+    const el = $(sel);
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2600);
+  };
+
+  $('#btnProfile').addEventListener('click', () => {
+    $('#profileWho').textContent =
+      `Signed in as ${me.username} · ${roles[me.role]?.label || me.role}`;
+    $('#profName').value = me.name || '';
+    $('#profUser').value = me.username || '';
+    ['#pwCurrent', '#pwNext', '#pwRepeat'].forEach((s) => ($(s).value = ''));
+    $('#profError').textContent = '';
+    dlgProfile.showModal();
+  });
+  $('#profClose').addEventListener('click', () => dlgProfile.close());
+
+  $('#profSave').addEventListener('click', async () => {
+    $('#profError').textContent = '';
+    try {
+      const res = await fetch('/api/me/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: $('#profName').value, username: $('#profUser').value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      me = { ...me, name: data.user.name, username: data.user.username };
+      applyRole();
+      flash('#profOk', 'Saved.');
+    } catch (e) {
+      $('#profError').textContent = e.message;
+    }
+  });
+
+  $('#pwSave').addEventListener('click', async () => {
+    $('#profError').textContent = '';
+    const next = $('#pwNext').value;
+    if (next.length < 4) { $('#profError').textContent = 'New password must be at least 4 characters.'; return; }
+    if (next !== $('#pwRepeat').value) { $('#profError').textContent = 'The two new passwords do not match.'; return; }
+    try {
+      const res = await fetch('/api/me/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current: $('#pwCurrent').value, next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      ['#pwCurrent', '#pwNext', '#pwRepeat'].forEach((s) => ($(s).value = ''));
+      flash('#pwOk', 'Password changed.');
+    } catch (e) {
+      $('#profError').textContent = e.message;
+    }
+  });
+
+  /* ---- team & roles (admins only) ---- */
+
+  const dlgTeam = $('#dlgTeam');
+  let team = [];
+
+  async function loadTeam() {
+    const res = await fetch('/api/users');
+    if (!res.ok) return;
+    const data = await res.json();
+    team = data.users;
+    roles = data.roles;
+    renderTeam();
+  }
+
+  function roleOptions(sel, current) {
+    sel.innerHTML = '';
+    for (const [key, def] of Object.entries(roles)) sel.appendChild(new Option(def.label, key));
+    if (current) sel.value = current;
+  }
+
+  function renderTeam() {
+    // compact summary on the panel
+    const sum = $('#teamSummary');
+    sum.innerHTML = '';
+    for (const u of team) {
+      const row = document.createElement('div');
+      row.className = 'teamsummary__row';
+      row.innerHTML = `<span class="who"><b></b><span class="u"></span></span>
+                       <span class="rolebadge ${u.role}"></span>`;
+      row.querySelector('b').textContent = u.name;
+      row.querySelector('.u').textContent = '@' + u.username + (u.disabled ? ' · off' : '');
+      row.querySelector('.rolebadge').textContent = roles[u.role]?.label || u.role;
+      sum.appendChild(row);
+    }
+
+    // role key in the dialog
+    const key = $('#roleKey');
+    key.innerHTML = '';
+    for (const [id, def] of Object.entries(roles)) {
+      const row = document.createElement('div');
+      row.className = 'rolekey__row';
+      row.innerHTML = `<span class="rolebadge ${id}"></span><span class="blurb"></span>`;
+      row.querySelector('.rolebadge').textContent = def.label;
+      row.querySelector('.blurb').textContent = def.blurb;
+      key.appendChild(row);
+    }
+
+    // editable list
+    const list = $('#userList');
+    list.innerHTML = '';
+    for (const u of team) {
+      const row = document.createElement('div');
+      row.className = 'urow' + (u.id === me.id ? ' me' : '') + (u.disabled ? ' off' : '');
+      row.innerHTML = `
+        <div class="urow__who">
+          <div class="urow__name"><span class="n"></span><span class="tag"></span></div>
+          <div class="urow__meta"></div>
+        </div>
+        <select class="r"></select>
+        <button class="mini pw">Reset password</button>
+        <button class="mini danger del">Remove</button>`;
+
+      row.querySelector('.n').textContent = `${u.name} · @${u.username}`;
+      row.querySelector('.tag').textContent = u.id === me.id ? 'YOU' : '';
+      row.querySelector('.urow__meta').textContent = u.lastLogin
+        ? 'last signed in ' + new Date(u.lastLogin).toLocaleString()
+        : 'never signed in';
+
+      const sel = row.querySelector('.r');
+      roleOptions(sel, u.role);
+      sel.disabled = u.id === me.id;         // no changing your own role
+      sel.addEventListener('change', () => updateUser({ id: u.id, role: sel.value }));
+
+      row.querySelector('.pw').addEventListener('click', async () => {
+        const next = prompt(`New password for ${u.username}:`);
+        if (!next) return;
+        await updateUser({ id: u.id, password: next });
+        alert(`Done. Give ${u.username} this password: ${next}`);
+      });
+
+      const del = row.querySelector('.del');
+      del.disabled = u.id === me.id;
+      del.addEventListener('click', async () => {
+        if (!confirm(`Remove ${u.name}'s account?`)) return;
+        await callTeam('/api/users/delete', { id: u.id });
+      });
+
+      list.appendChild(row);
+    }
+
+    roleOptions($('#nuRole'), 'scorer');
+  }
+
+  async function callTeam(path, body) {
+    $('#teamError').textContent = '';
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await loadTeam();
+      return true;
+    } catch (e) {
+      $('#teamError').textContent = e.message;
+      return false;
+    }
+  }
+  const updateUser = (patch) => callTeam('/api/users/update', patch);
+
+  $('#btnTeam').addEventListener('click', () => { $('#teamError').textContent = ''; dlgTeam.showModal(); });
+  $('#teamClose').addEventListener('click', () => dlgTeam.close());
+
+  $('#nuAdd').addEventListener('click', async () => {
+    const ok = await callTeam('/api/users', {
+      name: $('#nuName').value,
+      username: $('#nuUser').value,
+      password: $('#nuPass').value,
+      role: $('#nuRole').value,
+    });
+    if (ok) {
+      toast('Account created', `${$('#nuUser').value} · ${roles[$('#nuRole').value]?.label}`);
+      ['#nuName', '#nuUser', '#nuPass'].forEach((s) => ($(s).value = ''));
+    }
+  });
+
   /* ------------------------------------------------ share links */
 
   async function buildLinks() {
@@ -897,23 +1105,30 @@
   });
 
   (async function boot() {
+    const whoRes = await fetch('/api/me', { cache: 'no-store' });
+    if (whoRes.status === 401) { location.replace('/'); return; }
+    const who = await whoRes.json();
+    me = who.user;
+    caps = who.caps;
+    roles = who.roles;
+    applyRole();
+
     const res = await fetch('/api/raw', { cache: 'no-store' });
     if (res.status === 401) { location.replace('/'); return; }   // session expired
     const raw = await res.json();
 
     state = { settings: raw.settings, players: raw.players };
 
-    if (raw.needsKey) {
-      $('#btnLogout').hidden = false;
-      // Signing in stored a cookie, so the key doesn't need to sit in the URL.
-      if (KEY) history.replaceState(null, '', location.pathname);
-    }
+    // Signing in stored a cookie, so the key doesn't need to sit in the URL.
+    if (KEY) history.replaceState(null, '', location.pathname);
+
     fillSettings();
     wireSettings();
     renderEffects();
     renderPlayers();
     buildLinks();
     watchStream();
+    if (can('users')) loadTeam();
     setChip('saved', 'chip--ok');
   })();
 })();

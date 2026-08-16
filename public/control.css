@@ -253,6 +253,102 @@ input[type="checkbox"] { width: auto; accent-color: var(--gold); cursor: pointer
 .tip { font-size: 11px; line-height: 1.6; color: var(--muted); }
 .tip b { color: var(--text); }
 
+/* ---------------------------------------------------- roles */
+/* Panels stay hidden until the caps for this account are known, so nothing
+   the role can't use ever flashes on screen during boot. */
+.cap-players, .cap-effects, .cap-board, .cap-users { display: none; }
+body.can-players .cap-players,
+body.can-effects .cap-effects,
+body.can-board   .cap-board,
+body.can-users   .cap-users { display: revert; }
+
+.whoami {
+  display: flex; align-items: center; gap: 9px;
+  padding: 5px 12px 5px 6px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  font-family: var(--font);
+  transition: border-color .18s ease, background .18s ease;
+}
+.whoami:hover { border-color: var(--gold); background: #232c3b; }
+.whoami__av {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; color: #1a1200;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+}
+.whoami__txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
+.whoami__name { font-size: 12px; letter-spacing: 1px; }
+.whoami__role { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+
+.rolebadge {
+  font-size: 9px; letter-spacing: 1.6px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--line); color: var(--muted);
+}
+.rolebadge.admin { color: var(--gold); border-color: rgba(255,196,0,.45); }
+.rolebadge.scorer { color: #6fd3ff; border-color: rgba(111,211,255,.4); }
+.rolebadge.supervisor { color: #b48bff; border-color: rgba(180,139,255,.4); }
+
+/* ---- team panel ---- */
+.teamsummary { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; }
+.teamsummary__row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 13px;
+}
+.teamsummary__row .who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.teamsummary__row .who b { font-weight: 600; }
+.teamsummary__row .u { color: var(--muted); font-size: 11px; }
+.teamsummary__empty { font-size: 12px; color: var(--muted); }
+
+/* ---- team dialog ---- */
+.rolekey { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+.rolekey__row {
+  display: grid; grid-template-columns: 108px 1fr; gap: 10px; align-items: baseline;
+  font-size: 12px; color: var(--muted);
+}
+.userlist { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+.urow {
+  display: grid; grid-template-columns: 1fr 132px auto auto; gap: 8px; align-items: center;
+  padding: 8px 10px; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.urow.me { border-color: rgba(255,196,0,.4); }
+.urow.off { opacity: .5; }
+.urow__who { min-width: 0; }
+.urow__name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.urow__name .tag { color: var(--gold); font-size: 10px; letter-spacing: 1.5px; margin-left: 6px; }
+.urow__meta { font-size: 10px; color: var(--muted); letter-spacing: .5px; }
+.urow select { padding: 6px 7px; font-size: 12px; }
+.urow .mini {
+  background: transparent; border: 1px solid var(--line); border-radius: 5px;
+  color: var(--muted); cursor: pointer; padding: 5px 8px; font-size: 11px; font-family: var(--font);
+}
+.urow .mini:hover { color: var(--text); border-color: #35415a; }
+.urow .mini.danger:hover { color: #ff9a94; border-color: var(--red); }
+
+.newuser { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.newuser h4, .prof-block h4 {
+  font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 10px;
+}
+.newuser__grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 132px auto; gap: 8px; align-items: end;
+}
+@media (max-width: 620px) { .newuser__grid { grid-template-columns: 1fr 1fr; } }
+
+/* ---- profile dialog ---- */
+.profile-who { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.prof-block {
+  border: 1px solid var(--line); border-radius: 9px;
+  padding: 14px; margin-top: 12px; background: rgba(0,0,0,.2);
+}
+.dlg__actions--tight { margin-top: 10px; }
+.ok {
+  font-size: 12px; color: var(--green); min-height: 15px;
+  opacity: 0; transition: opacity .2s ease;
+}
+.ok.show { opacity: 1; }
+
 /* ---------------------------------------------------- effects rack */
 .fxrack { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px 0; }
 .fxrack:empty { display: none; }
