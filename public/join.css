@@ -161,11 +161,42 @@ body {
   animation: cardIn .5s .1s cubic-bezier(.2, .9, .25, 1) both;
 }
 .board h3 {
+  display: flex; align-items: center; gap: 8px;
   font-size: 11px; letter-spacing: 2.5px; color: var(--muted);
   text-transform: uppercase; margin-bottom: 10px;
 }
 .board h3 span { color: var(--accent); }
-.board ol { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.findme {
+  margin-left: auto; cursor: pointer;
+  font-family: var(--font); font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--green); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  border-radius: 999px; padding: 4px 10px;
+}
+.findme:hover { background: color-mix(in srgb, var(--green) 14%, transparent); }
+
+.board ol {
+  list-style: none; display: flex; flex-direction: column; gap: 4px;
+  max-height: 58vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;      /* momentum scrolling on iOS */
+  overscroll-behavior: contain;           /* don't drag the page when it hits the end */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 55%, transparent) transparent;
+  padding-right: 2px;
+}
+.board ol::-webkit-scrollbar { width: 8px; }
+.board ol::-webkit-scrollbar-track { background: rgba(255,255,255,.04); border-radius: 4px; }
+.board ol::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 4px;
+}
+.board ol::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.board li.ping { animation: ping 1.2s ease-out; }
+@keyframes ping {
+  0%, 100% { box-shadow: 0 0 0 1px transparent }
+  25% { box-shadow: 0 0 16px color-mix(in srgb, var(--green) 70%, transparent) }
+}
 .board li {
   display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 6px;
