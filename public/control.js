@@ -245,6 +245,7 @@
   };
   const CHK = {
     sAutoSort: 'autoSort', sRankChange: 'showRankChange', sNumbers: 'numbersRoll',
+    sJoinOpen: 'joinOpen', sJoinUpper: 'joinUpper',
   };
   const COLS = { cTeam: 'team', cAvatar: 'avatar' };
 
@@ -376,6 +377,183 @@
     dlgBooyah.close();
   });
 
+  /* ------------------------------------------------ google form import */
+
+  const dlgSheet = $('#dlgSheet');
+  let sheetRows = { headers: [], body: [] };
+
+  const sheetOpts = () => ({
+    upper: $('#sheetUpper').checked,
+    dedupe: $('#sheetDedupe').checked,
+    nameCol: Number($('#sheetNameCol').value),
+    scoreCol: Number($('#sheetScoreCol').value),
+  });
+
+  function loadSheetText(text) {
+    const rows = FFNames.parseDelimited(text);
+    sheetRows = FFNames.splitHeader(rows);
+    const { headers, body } = sheetRows;
+
+    const fill = (sel, extra) => {
+      sel.innerHTML = '';
+      if (extra) sel.appendChild(new Option(extra, '-1'));
+      headers.forEach((h, i) => sel.appendChild(new Option(h || `Column ${i + 1}`, String(i))));
+    };
+    fill($('#sheetNameCol'));
+    fill($('#sheetScoreCol'), '— none —');
+    $('#sheetNameCol').value = String(FFNames.pickNameColumn(headers, body));
+    $('#sheetScoreCol').value = String(FFNames.pickScoreColumn(headers));
+
+    previewSheet();
+  }
+
+  function previewSheet() {
+    const box = $('#sheetPreview');
+    box.innerHTML = '';
+    const { body } = sheetRows;
+    if (!body.length) { $('#sheetGo').disabled = true; $('#sheetGo').textContent = 'Import 0 players'; return; }
+
+    const o = sheetOpts();
+    const existing = new Set(
+      o.replace ? [] : state.players.map((p) => p.name.toLowerCase())
+    );
+    const seen = new Set();
+    let importable = 0;
+
+    for (const row of body.slice(0, 60)) {
+      const from = row[o.nameCol] || '';
+      const to = FFNames.formatPlayerName(from, o);
+      if (!to) continue;
+      const key = to.toLowerCase();
+      const dupe = o.dedupe && (seen.has(key) || existing.has(key));
+      if (!dupe) { importable++; seen.add(key); }
+
+      const line = document.createElement('div');
+      line.className = 'pv' + (dupe ? ' dupe' : '');
+      line.innerHTML = `<span class="from"></span><span class="arrow">→</span><span class="to"></span>`;
+      line.querySelector('.from').textContent = from;
+      line.querySelector('.to').textContent = to + (dupe ? '  (already on board)' : '');
+      box.appendChild(line);
+    }
+    if (body.length > 60) {
+      const more = document.createElement('div');
+      more.className = 'pv';
+      more.innerHTML = `<span class="from">…and ${body.length - 60} more rows</span>`;
+      box.appendChild(more);
+    }
+
+    $('#sheetGo').disabled = importable === 0;
+    $('#sheetGo').textContent = `Import ${importable} player${importable === 1 ? '' : 's'}`;
+  }
+
+  $('#btnSheet').addEventListener('click', () => {
+    $('#sheetError').textContent = '';
+    $('#sheetUpper').checked = !!state.settings.joinUpper;
+    dlgSheet.showModal();
+  });
+  $('#sheetCancel').addEventListener('click', () => dlgSheet.close());
+  $('#sheetText').addEventListener('input', (e) => loadSheetText(e.target.value));
+  ['#sheetNameCol', '#sheetScoreCol', '#sheetUpper', '#sheetDedupe', '#sheetReplace']
+    .forEach((sel) => $(sel).addEventListener('change', previewSheet));
+
+  $('#sheetFetch').addEventListener('click', async () => {
+    const btn = $('#sheetFetch');
+    const err = $('#sheetError');
+    err.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    try {
+      const res = await fetch('/api/import/sheet' + (KEY ? '?key=' + encodeURIComponent(KEY) : ''), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(KEY ? { 'X-LB-Key': KEY } : {}) },
+        body: JSON.stringify({ url: $('#sheetUrl').value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not read that sheet.');
+      $('#sheetText').value = data.csv;
+      loadSheetText(data.csv);
+    } catch (e) {
+      err.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Fetch';
+    }
+  });
+
+  $('#sheetGo').addEventListener('click', () => {
+    const o = sheetOpts();
+    const replace = $('#sheetReplace').checked;
+    const { players } = FFNames.extractPlayers($('#sheetText').value, o);
+    const existing = new Set(replace ? [] : state.players.map((p) => p.name.toLowerCase()));
+
+    const fresh = players
+      .filter((p) => !(o.dedupe && existing.has(p.name.toLowerCase())))
+      .map((p) => ({
+        id: uid(), name: p.name, team: '', score: p.score,
+        avatar: '', highlight: false, eliminated: false,
+      }));
+
+    state.players = replace ? fresh : state.players.concat(fresh);
+    push({ instant: true });
+    renderPlayers();
+    dlgSheet.close();
+    toast('Imported', `${fresh.length} player${fresh.length === 1 ? '' : 's'}`);
+  });
+
+  /* ------------------------------------------------ toasts */
+
+  function toast(tag, text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<span class="tag"></span><b></b>`;
+    el.querySelector('.tag').textContent = tag;
+    el.querySelector('b').textContent = text;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 4200);
+  }
+
+  /* ------------------------------------------------ live joins */
+
+  /** Players who sign themselves up at /join arrive over SSE. Only additions are
+   *  merged in, so nothing you are editing here can be overwritten. */
+  let mergeTimer = null;
+  function mergeRemote(remote) {
+    const mine = new Set(state.players.map((p) => p.id));
+    const added = remote.players.filter((p) => !mine.has(p.id));
+    if (!added.length) return;
+
+    state.players.push(...added.map((p) => ({
+      id: p.id, name: p.name, team: p.team, score: p.score,
+      avatar: p.avatar, highlight: p.highlight, eliminated: p.eliminated,
+    })));
+
+    const paint = () => {
+      // Don't rebuild the table out from under a field being typed in.
+      if (document.activeElement?.closest('.prow')) {
+        mergeTimer = setTimeout(paint, 500);
+        return;
+      }
+      renderPlayers();
+      for (const p of added) {
+        const row = tbody.querySelector(`.prow[data-id="${CSS.escape(p.id)}"]`);
+        if (row) row.classList.add('joined');
+      }
+    };
+    clearTimeout(mergeTimer);
+    paint();
+  }
+
+  function watchStream() {
+    const es = new EventSource('/api/stream');
+    es.addEventListener('state', (e) => {
+      try { mergeRemote(JSON.parse(e.data)); } catch (err) { console.error(err); }
+    });
+    es.addEventListener('joined', (e) => {
+      try { toast('joined', JSON.parse(e.data).name); } catch { /* ignore */ }
+    });
+    es.onerror = () => { es.close(); setTimeout(watchStream, 2000); };
+  }
+
   /* ------------------------------------------------ share links */
 
   async function buildLinks() {
@@ -407,20 +585,40 @@
     pick.value = pick.options[0].value;
     $('#obsUrl').value = pick.value;
     pick.style.display = pick.options.length > 1 ? '' : 'none';
+
+    // The sign-up link has to be reachable from the players' phones, so localhost
+    // is never the answer — offer the network addresses, best guess first.
+    const jp = $('#joinPick');
+    jp.innerHTML = '';
+    if (deployed) {
+      jp.appendChild(new Option('This site', location.origin + '/join'));
+    } else {
+      const lan = info.addresses.filter((h) => h !== 'localhost');
+      lan.forEach((h, i) => jp.appendChild(new Option(
+        `${h}${i === 0 ? '  (try this one first)' : ''}`, `http://${h}:${info.port}/join`)));
+      if (!lan.length) jp.appendChild(new Option('This PC only', `${location.origin}/join`));
+    }
+    jp.value = jp.options[0].value;
+    $('#joinUrl').value = jp.value;
+    jp.style.display = jp.options.length > 1 ? '' : 'none';
+    jp.addEventListener('change', () => ($('#joinUrl').value = jp.value));
     $('#viewers').textContent = deployed ? 'live on the internet'
       : info.addresses.length > 1 ? 'shareable on your network' : 'overlay link ready';
 
     pick.addEventListener('change', () => ($('#obsUrl').value = pick.value));
   }
 
-  $('#btnCopy').addEventListener('click', async () => {
-    const url = $('#obsUrl').value;
-    try { await navigator.clipboard.writeText(url); }
-    catch { $('#obsUrl').select(); document.execCommand('copy'); }
-    const b = $('#btnCopy');
-    b.textContent = 'Copied ✓';
-    setTimeout(() => (b.textContent = 'Copy'), 1400);
-  });
+  const wireCopy = (btnSel, inputSel) => {
+    $(btnSel).addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($(inputSel).value); }
+      catch { $(inputSel).select(); document.execCommand('copy'); }
+      const b = $(btnSel);
+      b.textContent = 'Copied ✓';
+      setTimeout(() => (b.textContent = 'Copy'), 1400);
+    });
+  };
+  wireCopy('#btnCopy', '#obsUrl');
+  wireCopy('#btnCopyJoin', '#joinUrl');
 
   /* ------------------------------------------------ boot */
 
@@ -438,6 +636,7 @@
     wireSettings();
     renderPlayers();
     buildLinks();
+    watchStream();
     setChip('saved', 'chip--ok');
   })();
 })();

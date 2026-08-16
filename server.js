@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { formatPlayerName } = require('./public/names.js');
 
 const argv = process.argv.slice(2);
 const argOf = (name, fallback) => {
@@ -41,6 +42,8 @@ const DEFAULT_STATE = {
     cycle: { enabled: false, size: 5, seconds: 8 },
     showRankChange: true,
     numbersRoll: true,
+    joinOpen: true,           // players may add themselves at /join
+    joinUpper: false,         // force imported/joined names to UPPERCASE
   },
   players: [],
   rev: 0,
@@ -48,6 +51,7 @@ const DEFAULT_STATE = {
 
 const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const MAX_PLAYERS = 200;
 
 let saveTimer = null;
 let state = load();
@@ -89,7 +93,7 @@ function normalize(raw) {
   settings.scale = clamp(Number(settings.scale) || 1, 0.4, 3);
   settings.speed = clamp(Number(settings.speed) || 1, 0.25, 4);
 
-  const players = (Array.isArray(s.players) ? s.players : []).slice(0, 200).map((p, i) => ({
+  const players = (Array.isArray(s.players) ? s.players : []).slice(0, MAX_PLAYERS).map((p, i) => ({
     id: typeof p.id === 'string' && p.id ? p.id : crypto.randomUUID(),
     name: String(p.name ?? `PLAYER_${i + 1}`).slice(0, 40),
     team: String(p.team ?? '').slice(0, 24),
@@ -108,6 +112,62 @@ function save(next) {
   saveTimer = setTimeout(() => {
     fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), () => {});
   }, 120);
+}
+
+/* ------------------------------------------------- player self sign-up */
+
+/** Per-IP throttle so one person can't spam the board from the join page.
+ *  Deliberately loose: a whole lobby signing up over the same venue Wi-Fi
+ *  shares one public IP, so this only has to stop a flood, not a crowd. */
+const joinLog = new Map();   // ip -> [timestamps]
+const JOIN_GAP_MS = 1500;          // stops double-taps on the button
+const JOIN_WINDOW_MS = 60 * 60e3;  // rolling hour
+const JOIN_MAX_PER_WINDOW = 80;
+
+function clientIp(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || req.socket.remoteAddress || 'unknown';
+}
+
+/** Returns { ok } or { error, code } — never throws. */
+function joinPlayer(rawName, ip) {
+  if (!state.settings.joinOpen) {
+    return { code: 403, error: 'Sign-ups are closed right now.' };
+  }
+  const name = formatPlayerName(rawName, { upper: !!state.settings.joinUpper });
+  if (!name) return { code: 400, error: 'Please enter your name.' };
+  if (name.length > 40) return { code: 400, error: 'That name is too long.' };
+
+  if (state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+    return { code: 409, error: `${name} is already on the board.`, name };
+  }
+  if (state.players.length >= MAX_PLAYERS) {
+    return { code: 409, error: 'The board is full.' };
+  }
+
+  const now = Date.now();
+  const hits = (joinLog.get(ip) || []).filter((t) => now - t < JOIN_WINDOW_MS);
+  if (hits.length && now - hits[hits.length - 1] < JOIN_GAP_MS) {
+    return { code: 429, error: 'One moment — try again in a couple of seconds.' };
+  }
+  if (hits.length >= JOIN_MAX_PER_WINDOW) {
+    return { code: 429, error: 'Too many sign-ups from this connection. Ask the host to add you.' };
+  }
+  hits.push(now);
+  joinLog.set(ip, hits);
+  if (joinLog.size > 5000) joinLog.clear();
+
+  const player = {
+    id: crypto.randomUUID(),
+    name, team: '', score: 0, avatar: '', highlight: false, eliminated: false,
+  };
+  state.players.push(player);
+  state.rev++;
+  save();
+  pushState();
+  broadcast('joined', { name });
+
+  return { ok: true, name, position: state.players.length };
 }
 
 /** State as the overlay consumes it: ranked highest-score-first and trimmed. */
@@ -263,24 +323,115 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // Public: this is the endpoint the shareable /join page posts to. No key —
+  // that is the point of it — but it is rate limited and can be switched off.
+  if (p === '/api/join' && req.method === 'POST') {
+    try {
+      const body = await readBody(req, 4_000);
+      const result = joinPlayer(body.name, clientIp(req));
+      return sendJSON(res, result.ok ? 200 : result.code, result);
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+  }
+
+  if (p === '/api/join/status') {
+    return sendJSON(res, 200, {
+      open: !!state.settings.joinOpen,
+      count: state.players.length,
+      title: state.settings.title,
+      subtitle: state.settings.subtitle,
+      theme: state.settings.theme,
+      accent: state.settings.accent,
+      upper: !!state.settings.joinUpper,
+    });
+  }
+
+  // Pulls a Google Sheet (a Form's response sheet) server-side, which dodges
+  // the CORS wall the browser would hit.
+  if (p === '/api/import/sheet' && req.method === 'POST') {
+    if (!authorized(req, url)) return sendJSON(res, 401, { error: 'bad key' });
+    try {
+      const body = await readBody(req, 4_000);
+      const csv = await fetchSheetCsv(String(body.url || ''));
+      return sendJSON(res, 200, { csv });
+    } catch (e) {
+      return sendJSON(res, 400, { error: String(e.message || e) });
+    }
+  }
+
   if (p === '/api/links') {
     return sendJSON(res, 200, { port: PORT, addresses: addresses(), needsKey: !!CONTROL_KEY });
   }
 
   if (p === '/overlay') return serveStatic(req, res, '/overlay.html');
   if (p === '/control') return serveStatic(req, res, '/control.html');
+  if (p === '/join') return serveStatic(req, res, '/join.html');
 
   return serveStatic(req, res, p);
 });
 
+/** Rewrite any Google Sheets link into its CSV export form. */
+function toCsvUrl(input) {
+  let u;
+  try { u = new URL(input.trim()); }
+  catch { throw new Error('That is not a valid link.'); }
+
+  if (!/^docs\.google\.com$/.test(u.hostname)) {
+    throw new Error('Only Google Sheets links are supported (docs.google.com).');
+  }
+  const gid = u.searchParams.get('gid') || (u.hash.match(/gid=(\d+)/) || [])[1] || '';
+
+  // Already published to the web: /spreadsheets/d/e/2PACX-…/pubhtml
+  const published = u.pathname.match(/\/spreadsheets\/d\/e\/([^/]+)\//);
+  if (published) {
+    return `https://docs.google.com/spreadsheets/d/e/${published[1]}/pub?output=csv` +
+      (gid ? `&gid=${gid}` : '');
+  }
+  // Normal sheet: /spreadsheets/d/<id>/edit#gid=0
+  const normal = u.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+  if (normal) {
+    return `https://docs.google.com/spreadsheets/d/${normal[1]}/export?format=csv` +
+      (gid ? `&gid=${gid}` : '');
+  }
+  throw new Error('That does not look like a Google Sheets link.');
+}
+
+async function fetchSheetCsv(input) {
+  const target = toCsvUrl(input);
+  const resp = await fetch(target, { redirect: 'follow', signal: AbortSignal.timeout(12000) });
+  if (!resp.ok) {
+    throw new Error(`Google returned ${resp.status}. Is the sheet shared with "Anyone with the link"?`);
+  }
+  const text = (await resp.text()).slice(0, 2_000_000);
+  // A sheet that isn't shared serves a sign-in page instead of CSV.
+  if (/^\s*<(!doctype|html)/i.test(text)) {
+    throw new Error('That sheet is private. In Sheets: Share → General access → Anyone with the link.');
+  }
+  return text;
+}
+
+/** Virtual adapters (VirtualBox, Docker, WSL, Hyper-V) hand out addresses that
+ *  look local but are unreachable from a player's phone. Rank them last so the
+ *  address we suggest first is the one on the real Wi-Fi. */
+function addressRank(ip) {
+  if (/^192\.168\.(56|57)\./.test(ip)) return 4;       // VirtualBox host-only, never reachable
+  if (/^169\.254\./.test(ip)) return 5;                // link-local, no DHCP
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 3; // Docker/WSL — but also real VPNs
+  if (/^192\.168\./.test(ip)) return 0;                // ordinary home Wi-Fi
+  if (/^10\./.test(ip)) return 1;
+  return 2;
+}
+
 function addresses() {
-  const out = ['localhost'];
+  const found = [];
   for (const list of Object.values(os.networkInterfaces())) {
     for (const ni of list || []) {
-      if (ni.family === 'IPv4' && !ni.internal) out.push(ni.address);
+      if (ni.family === 'IPv4' && !ni.internal) found.push(ni.address);
     }
   }
-  return out;
+  found.sort((a, b) => addressRank(a) - addressRank(b));
+  return ['localhost', ...found];
 }
 
 server.listen(PORT, '0.0.0.0', () => {
@@ -292,10 +443,15 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log(`  Control panel : \x1b[36mhttp://localhost:${PORT}/\x1b[0m`);
   console.log(`  OBS overlay   : \x1b[32mhttp://localhost:${PORT}/overlay\x1b[0m`);
+  console.log(`  Player sign-up: \x1b[35mhttp://localhost:${PORT}/join\x1b[0m`);
   if (lan.length) {
     console.log('');
-    console.log('  Share on your network (other PC / phone / OBS remote):');
-    for (const a of lan) console.log(`    \x1b[36mhttp://${a}:${PORT}/\x1b[0m  •  overlay: \x1b[32mhttp://${a}:${PORT}/overlay\x1b[0m`);
+    console.log('  Share on your network (other PC / phone / players):');
+    for (const a of lan) {
+      console.log(`    panel \x1b[36mhttp://${a}:${PORT}/\x1b[0m`);
+      console.log(`    OBS   \x1b[32mhttp://${a}:${PORT}/overlay\x1b[0m`);
+      console.log(`    join  \x1b[35mhttp://${a}:${PORT}/join\x1b[0m`);
+    }
   }
   if (CONTROL_KEY) console.log(`\n  Control key required: append ?key=${CONTROL_KEY} to the control panel URL`);
   console.log('\n  Press Ctrl+C to stop.\n');

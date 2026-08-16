@@ -201,6 +201,38 @@ input[type="checkbox"] { width: auto; accent-color: var(--gold); cursor: pointer
 .tip { font-size: 11px; line-height: 1.6; color: var(--muted); }
 .tip b { color: var(--text); }
 
+/* ---------------------------------------------------- join panel */
+.panel--join { border-color: rgba(255, 196, 0, .28); }
+.mini-sw { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 1.6px; color: var(--muted); text-transform: uppercase; cursor: pointer; }
+.mini-sw input { width: 16px; height: 16px; }
+.mini-sw input:checked + span { color: var(--green); }
+
+/* ---------------------------------------------------- toasts */
+.toasts {
+  position: fixed; right: 18px; bottom: 18px; z-index: 200;
+  display: flex; flex-direction: column-reverse; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px;
+  background: linear-gradient(180deg, #1b2432, #141a24);
+  border: 1px solid var(--line); border-left: 3px solid var(--green);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  font-size: 13px; letter-spacing: .5px;
+  animation: toastIn .35s cubic-bezier(.2, .9, .25, 1), toastOut .4s ease 3.4s forwards;
+}
+.toast b { color: var(--accent); letter-spacing: 1.4px; }
+.toast .tag { font-size: 10px; letter-spacing: 2px; color: var(--green); text-transform: uppercase; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(30px) } to { opacity: 1; transform: none } }
+@keyframes toastOut { to { opacity: 0; transform: translateX(30px) } }
+
+.prow.joined { animation: joinedRow 1.6s ease-out; }
+@keyframes joinedRow {
+  0%, 100% { box-shadow: none }
+  30% { box-shadow: 0 0 22px color-mix(in srgb, var(--green) 55%, transparent); border-color: var(--green) }
+}
+
 /* ---------------------------------------------------- dialog */
 .dlg {
   border: 1px solid var(--line); border-radius: 12px;
@@ -215,3 +247,29 @@ input[type="checkbox"] { width: auto; accent-color: var(--gold); cursor: pointer
 .dlg textarea { font-family: Consolas, monospace; font-size: 12px; resize: vertical; }
 .dlg__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .dlg .f { margin-top: 10px; }
+.dlg--wide { width: min(680px, 94vw); }
+.dlg .linkrow { margin-bottom: 10px; }
+.or {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); margin: 12px 0 8px;
+}
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.dlg__cols { padding: 12px 0 0; }
+.dlg__opts { margin-top: 12px; }
+.sheetPreview {
+  margin-top: 12px; max-height: 190px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 7px; background: #0d1219;
+  padding: 8px; display: flex; flex-direction: column; gap: 3px;
+}
+.sheetPreview:empty { display: none; }
+.sheetPreview .pv {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
+  font-size: 12px; padding: 4px 8px; border-radius: 4px;
+}
+.sheetPreview .pv:nth-child(odd) { background: rgba(255, 255, 255, .03); }
+.sheetPreview .pv .from { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheetPreview .pv .arrow { color: var(--line); }
+.sheetPreview .pv .to { color: var(--gold-2); font-size: 13px; letter-spacing: 1.2px; }
+.sheetPreview .pv.dupe .to { color: #6d7a8c; text-decoration: line-through; }
+.dlg .error { font-size: 12px; color: #ff9a94; min-height: 16px; margin-top: 8px; }

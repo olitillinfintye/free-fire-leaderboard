@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0d12" />
+<title>Join the Leaderboard</title>
+<link rel="stylesheet" href="/join.css" />
+</head>
+<body>
+<main class="wrap">
+
+  <section class="card" id="card">
+    <div class="card__glow"></div>
+
+    <header class="card__head">
+      <svg class="crown" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18l1.4-11-5.6 4L12 3 7.2 11 1.6 7 3 18Z"/></svg>
+      <h1 id="title">LEADERBOARD</h1>
+      <p id="subtitle">FREE FIRE MAX</p>
+    </header>
+
+    <!-- form -->
+    <form id="form" class="form" autocomplete="off">
+      <label for="name">Enter your name</label>
+      <input id="name" name="name" type="text" placeholder="e.g. Oliyad Tesfaye"
+             maxlength="60" autocapitalize="words" autocomplete="name" required />
+      <p class="preview" id="preview">You'll appear as <b>—</b></p>
+      <button id="submit" class="go" type="submit">JOIN THE MATCH</button>
+      <p class="error" id="error" role="alert"></p>
+    </form>
+
+    <!-- success -->
+    <div class="done" id="done" hidden>
+      <div class="tick">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2>You're in!</h2>
+      <p class="done__name" id="doneName"></p>
+      <p class="done__hint">Watch for your name on stream. Keep this page open to follow the board.</p>
+      <button class="again" id="again" type="button">Add someone else</button>
+    </div>
+
+    <p class="closed" id="closed" hidden>Sign-ups are closed right now.</p>
+  </section>
+
+  <section class="board" id="board" hidden>
+    <h3>ON THE BOARD <span id="count"></span></h3>
+    <ol id="list"></ol>
+  </section>
+
+  <p class="foot" id="status">connecting…</p>
+</main>
+<script src="/names.js"></script>
+<script src="/join.js"></script>
+</body>
+</html>

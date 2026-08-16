@@ -32,6 +32,7 @@
       <div class="row-actions">
         <button id="btnAdd" class="btn btn--gold">+ Add player</button>
         <button id="btnSort" class="btn">Sort now</button>
+        <button id="btnSheet" class="btn">Google Form</button>
         <button id="btnImport" class="btn">Bulk paste</button>
         <button id="btnExport" class="btn">Export</button>
         <button id="btnClear" class="btn btn--danger">Clear</button>
@@ -71,6 +72,25 @@
         </div>
         <select id="lanPick" class="sel"></select>
         <p class="tip">In OBS: <b>Sources → + → Browser</b>, paste this URL, set <b>1920×1080</b>, tick <i>Shutdown source when not visible</i> off. Updates appear instantly — no refresh.</p>
+      </div>
+    </section>
+
+    <section class="panel panel--join">
+      <div class="panel__head"><h2>Player sign-up</h2>
+        <label class="mini-sw"><input type="checkbox" id="sJoinOpen" /> <span>Open</span></label>
+      </div>
+      <div class="linkbox">
+        <label>Share this link with your players</label>
+        <div class="linkrow">
+          <input id="joinUrl" readonly />
+          <button id="btnCopyJoin" class="btn btn--gold btn--sm">Copy</button>
+        </div>
+        <select id="joinPick" class="sel"></select>
+        <label class="f f--row"><span>Force names to UPPERCASE</span>
+          <input type="checkbox" id="sJoinUpper" class="sw" /></label>
+        <p class="tip">They type their full name and land on the board automatically as
+          <b>First&nbsp;L</b> — “Oliyad Tesfaye” becomes <b>Oliyad T</b>. Turn <b>Open</b> off to
+          close entries once the match starts.</p>
       </div>
     </section>
 
@@ -154,6 +174,38 @@
   </div>
 </dialog>
 
+<!-- google form / sheets import -->
+<dialog id="dlgSheet" class="dlg dlg--wide">
+  <h3>Import from Google Forms</h3>
+  <p>Paste the <b>link to the responses spreadsheet</b> (Sheets → Share → <i>Anyone with the link</i>),
+     or just paste the rows straight out of the sheet. Names become <b>First&nbsp;L</b> automatically.</p>
+
+  <div class="linkrow">
+    <input id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/…" />
+    <button id="sheetFetch" class="btn btn--gold btn--sm">Fetch</button>
+  </div>
+  <p class="or">or paste the data</p>
+  <textarea id="sheetText" rows="7" placeholder="Timestamp, Email, Full name, IGN&#10;8/16/2026, a@x.com, Oliyad Tesfaye, SRX AXON"></textarea>
+
+  <div class="grid2 dlg__cols">
+    <label class="f"><span>Name column</span><select id="sheetNameCol"></select></label>
+    <label class="f"><span>Score column (optional)</span><select id="sheetScoreCol"></select></label>
+  </div>
+  <div class="toggles dlg__opts">
+    <label><input type="checkbox" id="sheetUpper" /> UPPERCASE</label>
+    <label><input type="checkbox" id="sheetDedupe" checked /> Skip duplicates</label>
+    <label><input type="checkbox" id="sheetReplace" /> Replace existing list</label>
+  </div>
+
+  <div class="sheetPreview" id="sheetPreview"></div>
+  <p class="error" id="sheetError"></p>
+
+  <div class="dlg__actions">
+    <button id="sheetCancel" class="btn">Cancel</button>
+    <button id="sheetGo" class="btn btn--gold" disabled>Import 0 players</button>
+  </div>
+</dialog>
+
 <dialog id="dlgBooyah" class="dlg">
   <h3>Trigger BOOYAH</h3>
   <label class="f"><span>Winner name shown on stream</span><input id="booyahName" /></label>
@@ -163,6 +215,9 @@
   </div>
 </dialog>
 
+<div id="toasts" class="toasts"></div>
+
+<script src="/names.js"></script>
 <script src="/control.js"></script>
 </body>
 </html>

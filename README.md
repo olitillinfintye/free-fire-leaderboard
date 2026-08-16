@@ -52,6 +52,57 @@ Wi-Fi. Every edit reaches the overlay instantly over SSE; you never refresh the 
 
 Turn **Auto-rank** off if you want to drag rows into a manual order instead.
 
+---
+
+## Getting players onto the board
+
+Three ways, all producing the same short name format: **first name + one letter of the
+surname**. "Oliyad Tesfaye" becomes **Oliyad T**.
+
+### 1. Let players add themselves (easiest)
+
+Share the **`/join`** link — it's in the control panel under **Player sign-up**, with a
+Copy button. Players open it on their phone, type their name, and land on the board
+instantly. They see exactly how their name will appear *before* they commit, then get a
+live view of the leaderboard.
+
+- Toggle **Open** off to close entries once the match starts.
+- New sign-ups pop up as a notification in your control panel and flash green in the list.
+- Duplicate names are rejected, and sign-ups are rate limited so nobody can flood the board.
+- **UPPERCASE** forces every name to caps, matching the classic Free Fire look.
+
+Sharing the link: on your own network use the address the panel suggests (not
+`localhost` — phones can't reach that). If the app is deployed, it's just your site's
+address with `/join` on the end.
+
+### 2. Import a Google Form
+
+If you collected sign-ups with a Google Form, hit **Google Form** in the control panel.
+
+- **Paste the link** to the responses spreadsheet (Sheets → Share → *Anyone with the link*),
+  and the server fetches it for you, or
+- **paste the rows** straight out of the sheet — CSV or tab-separated both work.
+
+It picks the name column automatically (preferring an "IGN"/"in-game name" column over
+"full name", and never a Timestamp or Email column) and shows you a before → after
+preview of every name. You can override the column, pull scores from a second column,
+force uppercase, and skip anyone already on the board.
+
+### 3. Type them in
+
+**+ Add player**, or **Bulk paste** for a plain list of names.
+
+Name formatting rules, if you're curious:
+
+| You type | Board shows | Why |
+|---|---|---|
+| `Oliyad Tesfaye` | `Oliyad T` | first name, initial of the last |
+| `mary jane watson` | `Mary W` | middle names ignored |
+| `Watson, Mary` | `Mary W` | "Last, First" is detected and flipped |
+| `jean-luc picard` | `Jean-Luc P` | both halves capitalised |
+| `McArthur Wallace` | `McArthur W` | existing capitals are never touched |
+| `AXON` | `AXON` | a single name is left alone |
+
 ## Overlay URL options
 
 Add these to the overlay URL when a scene should differ from the panel settings:
@@ -81,7 +132,11 @@ The repo ships a `render.yaml` blueprint, so Render sets everything up for you.
 You get a URL like `https://free-fire-leaderboard.onrender.com`:
 
 - **Overlay for OBS** → `https://…onrender.com/overlay` — open, no key, share it freely
+- **Player sign-up** → `https://…onrender.com/join` — open, send this to your players
 - **Control panel** → `https://…onrender.com/?key=YOUR_KEY` — only works with the key
+
+Deployed is the nicest way to run the sign-up page: players join from mobile data without
+needing to be on your Wi-Fi.
 
 Notes for the free plan:
 
@@ -111,17 +166,21 @@ node server.js --key mysecret
 ```
 
 or set `LB_KEY=mysecret` in the environment. The control panel then needs
-`?key=mysecret`; the overlay stays readable so OBS never needs the key.
+`?key=mysecret`. The overlay and the player sign-up page stay open on purpose — OBS
+never needs a key, and neither do your players.
 
 ## Files
 
 ```
-server.js            zero-dependency HTTP + SSE server
-render.yaml          Render blueprint
-data.json            your board, saved automatically (gitignored)
-public/control.html  control panel
-public/overlay.html  the OBS overlay
-start.bat            one-click local launcher
+server.js             zero-dependency HTTP + SSE server
+render.yaml           Render blueprint
+data.json             your board, saved automatically (gitignored)
+public/control.html   control panel
+public/overlay.html   the OBS overlay
+public/join.html      player sign-up page
+public/names.js       name formatting + CSV parsing (shared by server and pages)
+tools/test-names.js   tests for the above — `node tools/test-names.js`
+start.bat             one-click local launcher
 ```
 
 Other flags: `node server.js --port 9000`
