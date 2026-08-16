@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Free Fire Leaderboard — OBS Overlay</title>
+<link rel="stylesheet" href="/overlay.css" />
+</head>
+<body class="align-right">
+  <div id="stage" class="stage">
+    <section id="board" class="board" aria-live="polite">
+
+      <header class="board__head">
+        <div class="head__glow"></div>
+        <div class="head__inner">
+          <svg class="crown" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18l1.4-11-5.6 4L12 3 7.2 11 1.6 7 3 18Z"/></svg>
+          <div class="head__text">
+            <h1 id="title">LEADERBOARD</h1>
+            <p id="subtitle">FREE FIRE MAX</p>
+          </div>
+          <svg class="crown crown--r" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18l1.4-11-5.6 4L12 3 7.2 11 1.6 7 3 18Z"/></svg>
+        </div>
+        <div class="head__sweep"></div>
+      </header>
+
+      <div class="board__cols" id="cols">
+        <span class="c-rank">RANK</span>
+        <span class="c-name">PLAYER NAME</span>
+        <span class="c-score">SCORE</span>
+      </div>
+
+      <div class="board__rows" id="rows"></div>
+
+      <footer class="board__foot"><span id="pager"></span></footer>
+    </section>
+  </div>
+
+  <div id="booyah" class="booyah" aria-hidden="true">
+    <div class="booyah__word">BOOYAH!</div>
+    <div class="booyah__name"></div>
+  </div>
+
+  <div id="offline" class="offline">reconnecting…</div>
+
+<script src="/overlay.js"></script>
+</body>
+</html>

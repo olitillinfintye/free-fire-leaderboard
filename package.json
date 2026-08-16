@@ -1,0 +1,14 @@
+{
+  "name": "free-fire-leaderboard",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Animated Free Fire leaderboard overlay for OBS, with a live web control panel.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

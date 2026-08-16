@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: free-fire-leaderboard
+    runtime: node
+    plan: free
+    buildCommand: ""      # nothing to build — zero dependencies
+    startCommand: node server.js
+    healthCheckPath: /api/state
+    envVars:
+      # Render asks you for this value when you create the blueprint.
+      # The control panel then needs ?key=<value>; the overlay URL stays open for OBS.
+      - key: LB_KEY
+        sync: false
