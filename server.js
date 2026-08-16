@@ -165,10 +165,13 @@ function joinPlayer(rawName, ip) {
   state.rev++;
   save();
   pushState();
-  broadcast('joined', { name });
 
   return { ok: true, name, position: state.players.length };
 }
+
+/** One-shot overlay effects ride along inside the state rather than as their own
+ *  event, so they survive the polling fallback as well as the SSE path. */
+let lastAction = { seq: 0, type: null, payload: null };
 
 /** State as the overlay consumes it: ranked highest-score-first and trimmed. */
 function projected() {
@@ -178,7 +181,7 @@ function projected() {
     rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   }
   rows.forEach((r, i) => (r.rank = i + 1));
-  return { settings, players: rows, rev: state.rev };
+  return { settings, players: rows, rev: state.rev, action: lastAction };
 }
 
 /* ------------------------------------------------------------------- SSE */
@@ -285,6 +288,9 @@ const server = http.createServer(async (req, res) => {
       'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': '*',
     });
+    // Some proxies hold a response until their buffer fills; a padding comment
+    // pushes the first real event straight through.
+    res.write(':' + ' '.repeat(2048) + '\n\n');
     res.write('retry: 2000\n\n');
     res.write(`event: state\ndata: ${JSON.stringify(projected())}\n\n`);
     clients.add(res);
@@ -316,7 +322,13 @@ const server = http.createServer(async (req, res) => {
     if (!authorized(req, url)) return sendJSON(res, 401, { error: 'bad key' });
     try {
       const body = await readBody(req, 20_000);
-      broadcast('action', { type: String(body.type || ''), payload: body.payload ?? null });
+      lastAction = {
+        seq: lastAction.seq + 1,
+        type: String(body.type || ''),
+        payload: body.payload ?? null,
+      };
+      state.rev++;
+      pushState();
       return sendJSON(res, 200, { ok: true });
     } catch (e) {
       return sendJSON(res, 400, { error: String(e.message || e) });

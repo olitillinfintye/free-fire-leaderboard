@@ -241,12 +241,22 @@
     cycleTimer = setInterval(() => { page++; paint(); }, Math.max(2, c.seconds || 8) * 1000);
   }
 
+  let seenAction = null;
+
   function onState(st) {
     const prevCycle = settings && JSON.stringify(settings.cycle);
     applySettings(st.settings);
     allPlayers = st.players;
     paint();
     if (prevCycle !== JSON.stringify(settings.cycle)) scheduleCycle();
+
+    // Effects travel inside the state so they work over SSE and polling alike.
+    // The first state we ever see only establishes the baseline.
+    const act = st.action;
+    if (act && act.seq) {
+      if (seenAction !== null && act.seq !== seenAction) onAction(act);
+      seenAction = act.seq;
+    }
   }
 
   /* ------------------------------------------------ one-off actions */
@@ -271,29 +281,8 @@
 
   /* ------------------------------------------------ transport */
 
-  let es = null;
-  let retry = 0;
-
-  function connect() {
-    es = new EventSource('/api/stream');
-
-    es.addEventListener('state', (e) => {
-      document.body.classList.remove('is-offline');
-      retry = 0;
-      try { onState(JSON.parse(e.data)); } catch (err) { console.error(err); }
-    });
-
-    es.addEventListener('action', (e) => {
-      try { onAction(JSON.parse(e.data)); } catch (err) { console.error(err); }
-    });
-
-    es.onerror = () => {
-      document.body.classList.add('is-offline');
-      es.close();
-      retry = Math.min(retry + 1, 10);
-      setTimeout(connect, 500 * retry);
-    };
-  }
-
-  connect();
+  LBLive.connect({
+    onState,
+    onStatus: (s) => document.body.classList.toggle('is-offline', s !== 'live'),
+  });
 })();

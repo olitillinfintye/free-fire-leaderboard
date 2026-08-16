@@ -526,6 +526,7 @@
       id: p.id, name: p.name, team: p.team, score: p.score,
       avatar: p.avatar, highlight: p.highlight, eliminated: p.eliminated,
     })));
+    for (const p of added) toast('joined', p.name);
 
     const paint = () => {
       // Don't rebuild the table out from under a field being typed in.
@@ -544,14 +545,10 @@
   }
 
   function watchStream() {
-    const es = new EventSource('/api/stream');
-    es.addEventListener('state', (e) => {
-      try { mergeRemote(JSON.parse(e.data)); } catch (err) { console.error(err); }
+    LBLive.connect({
+      onState: mergeRemote,
+      onStatus: (s) => { if (s !== 'live' && !dirty) setChip('offline', 'chip--err'); },
     });
-    es.addEventListener('joined', (e) => {
-      try { toast('joined', JSON.parse(e.data).name); } catch { /* ignore */ }
-    });
-    es.onerror = () => { es.close(); setTimeout(watchStream, 2000); };
   }
 
   /* ------------------------------------------------ share links */

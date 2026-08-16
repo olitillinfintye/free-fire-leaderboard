@@ -120,28 +120,17 @@
 
   /* ---------------------------------------------- transport */
 
-  let retry = 0;
-  function connect() {
-    const es = new EventSource('/api/stream');
+  LBLive.connect({
+    onState: (st) => {
+      lastState = st;
+      applySettings(st.settings);
+      renderBoard(st);
+    },
+    onStatus: (s) => {
+      els.status.textContent = s === 'live' ? 'live' : 'reconnecting…';
+      els.status.classList.toggle('live', s === 'live');
+    },
+  });
 
-    es.addEventListener('state', (e) => {
-      retry = 0;
-      els.status.textContent = 'live';
-      els.status.classList.add('live');
-      lastState = JSON.parse(e.data);
-      applySettings(lastState.settings);
-      renderBoard(lastState);
-    });
-
-    es.onerror = () => {
-      els.status.textContent = 'reconnecting…';
-      els.status.classList.remove('live');
-      es.close();
-      retry = Math.min(retry + 1, 10);
-      setTimeout(connect, 500 * retry);
-    };
-  }
-
-  connect();
   els.name.focus();
 })();

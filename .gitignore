@@ -3,3 +3,7 @@ data.json
 *.log
 .DS_Store
 Thumbs.db
+
+.lbkey.tmp
+server.log
+tunnel.log
