@@ -82,6 +82,25 @@
     document.documentElement.style.setProperty('--quick-w', 152 + (steps().length - 1) * 76 + 'px');
   }
 
+  let query = '';
+
+  /** Hide non-matching rows. Ranks keep counting over the whole board, so a
+   *  filtered view still tells you where someone actually stands. */
+  function applySearch() {
+    let shown = 0;
+    for (const row of tbody.children) {
+      const name = row.querySelector('.f-name').value;
+      const hit = FFNames.matchesQuery(name, query);
+      row.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    }
+    const total = state.players.length;
+    $('#searchInfo').textContent = query ? `${shown} of ${total}` : '';
+    $('#searchClear').hidden = !query;
+    $('#noMatch').hidden = !(query && shown === 0);
+    $('#playerCount').textContent = total ? `· ${total}` : '';
+  }
+
   function renderPlayers() {
     sizeQuickColumn();
     const list = ordered();
@@ -151,7 +170,29 @@
       wireDrag(row);
       tbody.appendChild(row);
     });
+
+    applySearch();
   }
+
+  /* ------------------------------------------------ search box */
+
+  const searchEl = $('#search');
+  searchEl.addEventListener('input', () => { query = searchEl.value; applySearch(); });
+  searchEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { searchEl.value = ''; query = ''; applySearch(); }
+  });
+  $('#searchClear').addEventListener('click', () => {
+    searchEl.value = ''; query = ''; applySearch(); searchEl.focus();
+  });
+  // Ctrl+F / "/" jump straight to the box — handy with a long roster.
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '');
+    if ((e.ctrlKey && e.key === 'f') || (!typing && e.key === '/')) {
+      e.preventDefault();
+      searchEl.focus();
+      searchEl.select();
+    }
+  });
 
   /** Live re-ranking while you type.
    *  Two stages so the list never jumps out from under the cursor:
@@ -397,16 +438,209 @@
     $('#importText').value = '';
   });
 
-  /* ---- booyah ---- */
-  const dlgBooyah = $('#dlgBooyah');
-  $('#btnBooyah').addEventListener('click', () => {
-    $('#booyahName').value = ordered()[0]?.name || '';
-    dlgBooyah.showModal();
+  /* ---- show effects ---- */
+
+  const dlgFx = $('#dlgFx');
+  let editingFx = null;   // id being edited, or null when creating
+
+  const effects = () => (state.settings.effects ||= []);
+
+  function renderEffects() {
+    const rack = $('#fxRack');
+    rack.innerHTML = '';
+    for (const fx of effects()) {
+      const chip = document.createElement('div');
+      chip.className = 'fxchip';
+      chip.style.setProperty('--fx-c', fx.color);
+      chip.innerHTML =
+        `<button class="fxchip__play"><span class="fxchip__dot"></span><span class="lbl"></span></button>` +
+        `<button class="fxchip__edit" title="Edit">✎</button>`;
+      chip.querySelector('.lbl').textContent = fx.label;
+
+      chip.querySelector('.fxchip__play').addEventListener('click', () => {
+        action('effect', fx);
+        chip.classList.remove('playing');
+        void chip.offsetWidth;
+        chip.classList.add('playing');
+      });
+      chip.querySelector('.fxchip__edit').addEventListener('click', () => openFx(fx));
+      rack.appendChild(chip);
+    }
+  }
+
+  function openFx(fx) {
+    editingFx = fx ? fx.id : null;
+    $('#fxTitle').textContent = fx ? 'Edit effect' : 'New effect';
+    $('#fxLabel').value = fx?.label ?? '';
+    $('#fxText').value = fx?.text ?? '';
+    $('#fxSub').value = fx?.sub ?? '';
+    $('#fxColor').value = fx?.color ?? state.settings.accent ?? '#ffc400';
+    $('#fxStyle').value = fx?.style ?? 'burst';
+    $('#fxSecs').value = fx?.seconds ?? 3;
+    $('#fxSecsVal').textContent = ($('#fxSecs').value) + 's';
+    $('#fxDelete').hidden = !fx;
+    $('#fxError').textContent = '';
+    dlgFx.showModal();
+  }
+
+  const fxFromForm = () => ({
+    id: editingFx || uid(),
+    label: $('#fxLabel').value.trim() || $('#fxText').value.trim().slice(0, 24) || 'Effect',
+    text: $('#fxText').value,
+    sub: $('#fxSub').value,
+    color: $('#fxColor').value,
+    style: $('#fxStyle').value,
+    seconds: Number($('#fxSecs').value) || 3,
   });
-  $('#booyahCancel').addEventListener('click', () => dlgBooyah.close());
-  $('#booyahGo').addEventListener('click', () => {
-    action('booyah', { name: $('#booyahName').value });
-    dlgBooyah.close();
+
+  $('#fxSecs').addEventListener('input', (e) => ($('#fxSecsVal').textContent = e.target.value + 's'));
+  $('#btnNewFx').addEventListener('click', () => openFx(null));
+  $('#fxCancel').addEventListener('click', () => dlgFx.close());
+  $('#fxTest').addEventListener('click', () => action('effect', fxFromForm()));
+
+  $('#fxSave').addEventListener('click', () => {
+    const fx = fxFromForm();
+    if (!fx.text.trim() && !fx.sub.trim()) {
+      $('#fxError').textContent = 'Give it some text to show.';
+      return;
+    }
+    const list = effects();
+    const at = list.findIndex((e) => e.id === fx.id);
+    if (at >= 0) list[at] = fx; else list.push(fx);
+    push({ instant: true });
+    renderEffects();
+    dlgFx.close();
+  });
+
+  $('#fxDelete').addEventListener('click', () => {
+    state.settings.effects = effects().filter((e) => e.id !== editingFx);
+    push({ instant: true });
+    renderEffects();
+    dlgFx.close();
+  });
+
+  $('#btnStopFx').addEventListener('click', () => action('clearfx'));
+
+  /* ------------------------------------------------ json file import */
+
+  const dlgJson = $('#dlgJson');
+  let jsonParsed = null;
+
+  function showJsonPreview() {
+    const box = $('#jsonPreview');
+    box.innerHTML = '';
+    $('#jsonGo').disabled = !jsonParsed;
+    if (!jsonParsed) { $('#jsonGo').textContent = 'Import'; return; }
+
+    const replace = document.querySelector('input[name="jsonMode"]:checked').value === 'replace';
+    const skip = $('#jsonSkipDupes').checked;
+    const existing = new Set(replace ? [] : state.players.map((p) => p.name.toLowerCase()));
+
+    const seen = new Set();
+    let importable = 0;
+    for (const p of jsonParsed.players) {
+      const key = p.name.toLowerCase();
+      const dupe = skip && (existing.has(key) || seen.has(key));
+      if (!dupe) { importable++; seen.add(key); }
+
+      if (box.children.length < 60) {
+        const line = document.createElement('div');
+        line.className = 'pv' + (dupe ? ' dupe' : '');
+        line.innerHTML = `<span class="to"></span><span class="arrow"></span><span class="from"></span>`;
+        line.querySelector('.to').textContent = p.name;
+        line.querySelector('.from').textContent = dupe ? 'already on board' : String(p.score);
+        box.appendChild(line);
+      }
+    }
+    if (jsonParsed.players.length > 60) {
+      const more = document.createElement('div');
+      more.className = 'pv';
+      more.innerHTML = `<span class="from">…and ${jsonParsed.players.length - 60} more</span>`;
+      box.appendChild(more);
+    }
+
+    const verb = replace ? 'Replace with' : 'Add';
+    $('#jsonGo').textContent = `${verb} ${importable} player${importable === 1 ? '' : 's'}`;
+    $('#jsonGo').disabled = importable === 0;
+  }
+
+  async function loadJsonFile(file) {
+    const err = $('#jsonError');
+    err.textContent = '';
+    jsonParsed = null;
+    $('#jsonName').textContent = file ? file.name : '';
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      jsonParsed = FFNames.playersFromJson(text);
+      $('#jsonSettingsRow').hidden = !jsonParsed.settings;
+    } catch (e) {
+      err.textContent = e instanceof SyntaxError ? "That file isn't valid JSON." : e.message;
+      $('#jsonSettingsRow').hidden = true;
+    }
+    showJsonPreview();
+  }
+
+  $('#btnJson').addEventListener('click', () => {
+    jsonParsed = null;
+    $('#jsonFile').value = '';
+    $('#jsonName').textContent = '';
+    $('#jsonError').textContent = '';
+    $('#jsonPreview').innerHTML = '';
+    $('#jsonSettingsRow').hidden = true;
+    $('#jsonGo').disabled = true;
+    $('#jsonGo').textContent = 'Import';
+    dlgJson.showModal();
+  });
+  $('#jsonCancel').addEventListener('click', () => dlgJson.close());
+  $('#jsonFile').addEventListener('change', (e) => loadJsonFile(e.target.files[0]));
+  document.querySelectorAll('input[name="jsonMode"]').forEach((r) =>
+    r.addEventListener('change', showJsonPreview));
+  $('#jsonSkipDupes').addEventListener('change', showJsonPreview);
+
+  const drop = $('#jsonDrop');
+  ['dragenter', 'dragover'].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) =>
+    drop.addEventListener(ev, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    loadJsonFile(e.dataTransfer.files[0]);
+  });
+
+  $('#jsonGo').addEventListener('click', () => {
+    if (!jsonParsed) return;
+    const replace = document.querySelector('input[name="jsonMode"]:checked').value === 'replace';
+    const skip = $('#jsonSkipDupes').checked;
+
+    const existing = new Set(replace ? [] : state.players.map((p) => p.name.toLowerCase()));
+    const usedIds = new Set(replace ? [] : state.players.map((p) => p.id));
+    const seen = new Set();
+
+    const fresh = [];
+    for (const p of jsonParsed.players) {
+      const key = p.name.toLowerCase();
+      if (skip && (existing.has(key) || seen.has(key))) continue;
+      seen.add(key);
+      fresh.push({
+        id: p.id && !usedIds.has(p.id) ? p.id : uid(),
+        name: p.name, team: p.team, score: p.score,
+        avatar: p.avatar, highlight: p.highlight, eliminated: p.eliminated,
+      });
+    }
+
+    state.players = replace ? fresh : state.players.concat(fresh);
+
+    if (jsonParsed.settings && $('#jsonSettings').checked) {
+      state.settings = { ...state.settings, ...jsonParsed.settings };
+      fillSettings();
+    }
+
+    push({ instant: true });
+    renderPlayers();
+    dlgJson.close();
+    toast('Imported', `${fresh.length} player${fresh.length === 1 ? '' : 's'} from JSON`);
   });
 
   /* ------------------------------------------------ google form import */
@@ -663,6 +897,7 @@
     }
     fillSettings();
     wireSettings();
+    renderEffects();
     renderPlayers();
     buildLinks();
     watchStream();

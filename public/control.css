@@ -99,6 +99,56 @@ body {
 .btn--danger:hover { background: rgba(255,69,58,.15); border-color: var(--red); }
 .btn--ghost { background: transparent; }
 
+/* ---------------------------------------------------- search */
+.count { color: var(--muted); font-size: 11px; letter-spacing: 1.5px; }
+
+.searchbar {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 12px 0;
+  padding: 0 12px 0 34px;
+  background: #0d1219;
+  border: 1px solid var(--line); border-radius: 7px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.searchbar:focus-within { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(255,196,0,.15); }
+.searchbar__icon {
+  position: absolute; left: 10px; width: 16px; height: 16px;
+  fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round;
+}
+.searchbar:focus-within .searchbar__icon { stroke: var(--gold); }
+.searchbar input {
+  flex: 1; border: 0; background: transparent; padding: 10px 0; font-size: 14px;
+}
+.searchbar input:focus { outline: none; box-shadow: none; }
+.searchbar input::-webkit-search-cancel-button { display: none; }
+.searchbar__clear {
+  background: transparent; border: 0; color: var(--muted); cursor: pointer;
+  font-size: 13px; padding: 4px 6px; border-radius: 4px;
+}
+.searchbar__clear:hover { color: var(--text); background: rgba(255,255,255,.08); }
+.searchbar__info {
+  font-size: 11px; letter-spacing: 1.5px; color: var(--gold); white-space: nowrap;
+}
+.prow.hidden { display: none; }
+.prow mark { background: rgba(255,196,0,.28); color: var(--gold-2); border-radius: 2px; padding: 0 1px; }
+
+/* ---------------------------------------------------- drop zone */
+.drop {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 26px 18px; cursor: pointer;
+  border: 1px dashed var(--line); border-radius: 10px;
+  background: #0d1219;
+  transition: border-color .18s ease, background .18s ease;
+  text-align: center;
+}
+.drop:hover, .drop.over { border-color: var(--gold); background: rgba(255,196,0,.06); }
+.drop__icon { font-size: 22px; color: var(--gold); }
+.drop__text { font-size: 13px; color: var(--muted); }
+.drop__text b { color: var(--text); }
+.drop__name { font-size: 12px; color: var(--gold-2); letter-spacing: 1px; }
+.drop__name:empty { display: none; }
+
 /* ---------------------------------------------------- table */
 .tablewrap { padding: 8px 10px 12px; }
 .thead, .prow {
@@ -202,6 +252,41 @@ input[type="checkbox"] { width: auto; accent-color: var(--gold); cursor: pointer
 .linkrow input { font-size: 12px; color: var(--gold-2); }
 .tip { font-size: 11px; line-height: 1.6; color: var(--muted); }
 .tip b { color: var(--text); }
+
+/* ---------------------------------------------------- effects rack */
+.fxrack { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px 0; }
+.fxrack:empty { display: none; }
+.fxchip {
+  display: flex; align-items: stretch;
+  border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
+  background: var(--panel-2);
+  transition: border-color .18s ease, transform .12s ease;
+}
+.fxchip:hover { border-color: var(--fx-c, var(--gold)); }
+.fxchip:active { transform: translateY(1px); }
+.fxchip__play {
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text); font-family: var(--font); font-size: 12px; letter-spacing: 1.4px;
+  padding: 9px 12px;
+}
+.fxchip__play:hover { background: rgba(255,255,255,.06); }
+.fxchip__dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--fx-c, var(--gold));
+  box-shadow: 0 0 8px var(--fx-c, var(--gold));
+}
+.fxchip__edit {
+  background: transparent; border: 0; border-left: 1px solid var(--line);
+  color: var(--muted); cursor: pointer; padding: 0 9px; font-size: 12px;
+}
+.fxchip__edit:hover { color: var(--gold); background: rgba(255,255,255,.06); }
+.fxchip.playing { animation: fxFired .6s ease; }
+@keyframes fxFired {
+  0%, 100% { box-shadow: none }
+  40% { box-shadow: 0 0 18px var(--fx-c, var(--gold)) }
+}
+.dlg__actions .spacer { flex: 1; }
 
 /* ---------------------------------------------------- join panel */
 .panel--join { border-color: rgba(255, 196, 0, .28); }

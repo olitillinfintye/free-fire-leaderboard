@@ -24,7 +24,7 @@
     title: $('#title'),
     subtitle: $('#subtitle'),
     pager: $('#pager'),
-    booyah: $('#booyah'),
+    fx: $('#fx'),
     cols: $('#cols'),
   };
 
@@ -252,8 +252,10 @@
 
     // Effects travel inside the state so they work over SSE and polling alike.
     // The first state we ever see only establishes the baseline.
+    // seq starts at 0, so test for the field itself — testing truthiness would
+    // skip the baseline and swallow the first effect after every page load.
     const act = st.action;
-    if (act && act.seq) {
+    if (act && typeof act.seq === 'number') {
       if (seenAction !== null && act.seq !== seenAction) onAction(act);
       seenAction = act.seq;
     }
@@ -261,10 +263,52 @@
 
   /* ------------------------------------------------ one-off actions */
 
+  /** {top1}, {top1score} and {players} are filled from the current board. */
+  function fillTokens(text) {
+    const top = allPlayers[0];
+    return String(text || '')
+      .replace(/\{top1\}/gi, top ? top.name : '')
+      .replace(/\{top1score\}/gi, top ? String(top.total) : '0')
+      .replace(/\{players\}/gi, String(allPlayers.length));
+  }
+
+  // Effects queue so two triggers in quick succession play in turn rather than
+  // cutting each other off.
+  const fxQueue = [];
+  let fxPlaying = false;
+
+  function playEffect(fx) {
+    fxQueue.push(fx);
+    if (!fxPlaying) nextEffect();
+  }
+
+  function nextEffect() {
+    const fx = fxQueue.shift();
+    if (!fx) { fxPlaying = false; return; }
+    fxPlaying = true;
+
+    const ms = Math.max(1, Number(fx.seconds) || 3) * 1000;
+    const el = els.fx;
+    el.className = 'fx fx--' + (fx.style || 'burst');
+    el.style.setProperty('--fx', fx.color || 'var(--accent)');
+    el.style.setProperty('--fx-dur', ms + 'ms');
+    el.querySelector('.fx__word').textContent = fillTokens(fx.text);
+    el.querySelector('.fx__sub').textContent = fillTokens(fx.sub);
+
+    void el.offsetWidth;
+    el.classList.add('go');
+    setTimeout(() => {
+      el.classList.remove('go');
+      setTimeout(nextEffect, 120);
+    }, ms);
+  }
+
   function onAction({ type, payload }) {
-    if (type === 'booyah') {
-      els.booyah.querySelector('.booyah__name').textContent = payload?.name || '';
-      pulse(els.booyah, 'go', 2700);
+    if (type === 'effect') {
+      playEffect(payload || {});
+    } else if (type === 'booyah') {
+      // kept so older links and the original button still work
+      playEffect({ text: 'BOOYAH!', sub: payload?.name || '', color: '#ffc400', style: 'burst', seconds: 3 });
     } else if (type === 'flash') {
       const entry = live.get(payload?.id);
       if (entry) pulse(entry.el, 'flash', 1900 / (settings.speed || 1));
@@ -274,6 +318,10 @@
         entry.el.style.setProperty('--i', String(i++));
         pulse(entry.el, 'enter', 1100);
       }
+    } else if (type === 'clearfx') {
+      fxQueue.length = 0;
+      fxPlaying = false;
+      els.fx.classList.remove('go');
     } else if (type === 'reload') {
       location.reload();
     }

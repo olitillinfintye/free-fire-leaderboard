@@ -319,29 +319,84 @@ body.align-left .board.is-hidden { transform: translateX(-40px) scale(.96); }
 }
 #pager { font-size: 9px; letter-spacing: 2px; color: rgba(0,0,0,.65); font-weight: 700; }
 
-/* ---- booyah burst ------------------------------------------ */
-.booyah {
+/* ---- show effects ------------------------------------------ */
+.fx {
   position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; opacity: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  --fx: var(--accent);
 }
-.booyah.go { animation: booyahIn 2.6s cubic-bezier(.2,.9,.25,1) forwards; }
-.booyah__word {
-  font-size: 108px; font-weight: 800; letter-spacing: 8px; font-style: italic;
-  background: linear-gradient(180deg, #fff 15%, var(--accent) 50%, #ff8a00 100%);
+.fx__inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.fx__word {
+  font-size: clamp(48px, 9vw, 118px); font-weight: 800; letter-spacing: 8px; font-style: italic;
+  white-space: nowrap;
+  background: linear-gradient(180deg, #fff 15%, var(--fx) 52%, color-mix(in srgb, var(--fx) 55%, #000) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 0 30px rgba(255,180,0,.75)) drop-shadow(0 6px 0 rgba(0,0,0,.5));
+  filter: drop-shadow(0 0 30px color-mix(in srgb, var(--fx) 70%, transparent))
+          drop-shadow(0 6px 0 rgba(0,0,0,.5));
 }
-.booyah__name {
-  font-size: 26px; letter-spacing: 6px; color: #fff;
-  text-shadow: 0 0 18px rgba(255,196,0,.8);
+.fx__word:empty, .fx__sub:empty { display: none; }
+.fx__sub {
+  font-size: clamp(16px, 2.4vw, 28px); letter-spacing: 6px; color: #fff; text-align: center;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--fx) 80%, transparent);
 }
-@keyframes booyahIn {
+.fx__flash {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--fx) 55%, transparent), transparent 65%);
+}
+
+/* each style drives the same markup differently */
+.fx.go              { opacity: 1; }
+.fx.go .fx__inner   { animation: var(--fx-anim) var(--fx-dur, 3s) cubic-bezier(.2,.9,.25,1) forwards; }
+.fx.go .fx__flash   { animation: fxFlash var(--fx-dur, 3s) ease-out forwards; }
+
+.fx.fx--burst  { --fx-anim: fxBurst; }
+.fx.fx--slam   { --fx-anim: fxSlam; }
+.fx.fx--sweep  { --fx-anim: fxSweep; }
+.fx.fx--flash  { --fx-anim: fxPop; }
+.fx.fx--ticker { --fx-anim: fxTicker; justify-content: flex-start; }
+.fx.fx--ticker .fx__word { font-size: clamp(30px, 4.5vw, 60px); letter-spacing: 5px; }
+
+@keyframes fxBurst {
   0%   { opacity: 0; transform: scale(.4) rotate(-6deg); }
-  14%  { opacity: 1; transform: scale(1.12) rotate(2deg); }
-  22%  { transform: scale(1) rotate(0); }
-  78%  { opacity: 1; transform: scale(1.02); }
+  12%  { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  20%  { transform: scale(1) rotate(0); }
+  80%  { opacity: 1; transform: scale(1.02); }
   100% { opacity: 0; transform: scale(1.25); filter: blur(8px); }
+}
+@keyframes fxSlam {
+  0%   { opacity: 0; transform: translateY(-55vh) scale(1.6); }
+  16%  { opacity: 1; transform: translateY(0) scale(1); }
+  20%  { transform: translateY(0) scale(.94); }
+  24%  { transform: translateY(0) scale(1.03); }
+  28%  { transform: translateY(0) scale(1); }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(14px) scale(.96); }
+}
+@keyframes fxSweep {
+  0%   { opacity: 0; transform: translateX(-60vw) skewX(-14deg); }
+  18%  { opacity: 1; transform: translateX(0) skewX(-14deg); }
+  75%  { opacity: 1; transform: translateX(0) skewX(-14deg); }
+  100% { opacity: 0; transform: translateX(60vw) skewX(-14deg); }
+}
+@keyframes fxPop {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  6%   { opacity: 1; transform: scale(1.06); }
+  12%  { opacity: .35; }
+  18%  { opacity: 1; transform: scale(1); }
+  86%  { opacity: 1; }
+}
+@keyframes fxTicker {
+  0%   { opacity: 0; transform: translateX(100vw); }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-100vw); }
+}
+@keyframes fxFlash {
+  0%   { opacity: 0; }
+  8%   { opacity: .85; }
+  30%  { opacity: .18; }
+  100% { opacity: 0; }
 }
 
 /* ---- connection state -------------------------------------- */

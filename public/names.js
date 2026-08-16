@@ -123,6 +123,44 @@
     return opts.upper ? out.toUpperCase() : out;
   }
 
+  /* ---------------------------------------------------------------- search */
+
+  // Gamer tags lean on letterforms that look like ASCII but aren't, and none of
+  // them survive a plain toLowerCase(). NFKD handles the fullwidth and modifier
+  // letters ("Tｅｅ" -> "Tee", "ᴰᴿ" -> "DR"); small capitals have no
+  // decomposition at all, so they need a table.
+  const SMALL_CAPS =
+    'ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘqʀꜱᴛᴜᴠᴡxʏᴢ';
+  const SMALL_CAPS_PLAIN =
+    'abcdefghijklmnopqrstuvwxyz';
+  const EXTRA = { 'ғ': 'f', 'ǫ': 'q', 'ʏ': 'y', 'ᴡ': 'w', 'ᴠ': 'v', 'ㅤ': ' ', '　': ' ' };
+
+  /** Fold a display name down to something a typed query can match. */
+  function searchKey(s) {
+    let out = String(s ?? '')
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '');    // drop combining accents
+
+    let folded = '';
+    for (const ch of out) {
+      const i = SMALL_CAPS.indexOf(ch);
+      if (i !== -1) { folded += SMALL_CAPS_PLAIN[i]; continue; }
+      folded += EXTRA[ch] ?? ch;
+    }
+    return folded.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  /** True when `query` appears in `name`, ignoring decoration and case.
+   *  Multiple words match in any order, so "evo raiden" finds "EVO.R4IDENX7". */
+  function matchesQuery(name, query) {
+    const q = searchKey(query);
+    if (!q) return true;
+    const hay = searchKey(name);
+    // Punctuation between words shouldn't block a match.
+    const loose = hay.replace(/[^\p{L}\p{N} ]+/gu, ' ');
+    return q.split(' ').every((word) => hay.includes(word) || loose.includes(word));
+  }
+
   /** Full pipeline: raw paste/CSV text -> [{ name, score }]. */
   function extractPlayers(text, opts = {}) {
     const rows = parseDelimited(text);
@@ -146,7 +184,43 @@
     return { headers, body, nameCol, players: out };
   }
 
-  const api = { parseDelimited, splitHeader, pickNameColumn, pickScoreColumn, formatPlayerName, extractPlayers };
+  /* ------------------------------------------------------- json import */
+
+  /** Accepts a full board export, { players: [...] }, a bare array of player
+   *  objects, or a plain list of names. Returns [{ id?, name, score, ... }]. */
+  function playersFromJson(input) {
+    const data = typeof input === 'string' ? JSON.parse(input) : input;
+
+    let rows;
+    if (Array.isArray(data)) rows = data;
+    else if (data && Array.isArray(data.players)) rows = data.players;
+    else throw new Error('No players found — expected a board export or a list of players.');
+
+    const out = rows.map((r, i) => {
+      if (typeof r === 'string') return { name: r.trim(), score: 0 };
+      if (!r || typeof r !== 'object') throw new Error(`Row ${i + 1} is not a player.`);
+      const name = String(r.name ?? r.player ?? r.ign ?? '').trim();
+      const rawScore = r.score ?? r.points ?? r.total ?? 0;
+      const score = Number(String(rawScore).replace(/[^\d.-]/g, ''));
+      return {
+        id: typeof r.id === 'string' ? r.id : undefined,
+        name,
+        team: String(r.team ?? '').trim(),
+        score: Number.isFinite(score) ? Math.round(score) : 0,
+        avatar: String(r.avatar ?? ''),
+        highlight: !!r.highlight,
+        eliminated: !!r.eliminated,
+      };
+    }).filter((p) => p.name);
+
+    if (!out.length) throw new Error('That file has no named players in it.');
+    return { players: out, settings: (data && data.settings) || null };
+  }
+
+  const api = {
+    parseDelimited, splitHeader, pickNameColumn, pickScoreColumn,
+    formatPlayerName, extractPlayers, searchKey, matchesQuery, playersFromJson,
+  };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.FFNames = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

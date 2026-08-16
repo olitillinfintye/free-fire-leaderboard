@@ -1,7 +1,7 @@
 /* Quick checks for the Google Form name parsing.  Run: node tools/test-names.js */
 
-const { formatPlayerName, extractPlayers, pickNameColumn, splitHeader, parseDelimited } =
-  require('../public/names.js');
+const { formatPlayerName, extractPlayers, pickNameColumn, splitHeader, parseDelimited,
+        searchKey, matchesQuery, playersFromJson } = require('../public/names.js');
 
 let pass = 0;
 let fail = 0;
@@ -72,6 +72,34 @@ eq(
   ['Oliyad T', 'Oliyad T'],
   'dedupe can be turned off'
 );
+
+console.log('\nsearch — real tags from the Ethio roster');
+eq(searchKey('ꜱʜᴀᴅᴏᴡツᴋɪʟʟ').includes('shadow'), true, 'small capitals fold to ascii');
+eq(searchKey('DAN!『ツ』Tｅｄｄｙ').includes('teddy'), true, 'fullwidth letters fold to ascii');
+eq(searchKey('➳ᴹᴿ᭄ደመላሽ༒FF•').includes('mr'), true, 'modifier letters fold to ascii');
+eq(matchesQuery('ᴰᴿㅤTaiLungㅤ!', 'tailung'), true, 'decorated prefix ignored');
+eq(matchesQuery('EVO.R4IDENX7', 'evo'), true, 'plain prefix match');
+eq(matchesQuery('EVO.RAIDEN', 'evo raiden'), true, 'two words match across punctuation');
+eq(matchesQuery('XTR.SWANKY', 'swanky'), true, 'match after a dot');
+eq(matchesQuery('Ʀøx┊ᴏʙɪᴛᴏོ', 'obito'), true, 'small caps plus separators');
+eq(matchesQuery('ኢትዮsami', 'sami'), true, 'latin inside an amharic tag');
+eq(matchesQuery('ኢትዮsami', 'ኢትዮ'), true, 'amharic query matches too');
+eq(matchesQuery('Bobby', 'zzz'), false, 'non-match is a non-match');
+eq(matchesQuery('Bobby', ''), true, 'empty query matches everything');
+
+console.log('\njson import');
+eq(playersFromJson('{"players":[{"name":"Bino","score":629}]}').players,
+   [{ id: undefined, name: 'Bino', team: '', score: 629, avatar: '', highlight: false, eliminated: false }],
+   'board export shape');
+eq(playersFromJson('[{"name":"Bobby","score":900}]').players.length, 1, 'bare array of objects');
+eq(playersFromJson('["AYKT1","Bino"]').players.map((p) => p.name), ['AYKT1', 'Bino'], 'plain list of names');
+eq(playersFromJson('[{"player":"Abdi","points":"1,500"}]').players[0],
+   { id: undefined, name: 'Abdi', team: '', score: 1500, avatar: '', highlight: false, eliminated: false },
+   'alternate keys and a formatted number');
+eq(playersFromJson('{"players":[{"name":"  Kidus  ","score":600},{"name":""}]}').players.length, 1,
+   'blank names dropped, whitespace trimmed');
+try { playersFromJson('{"foo":1}'); eq('no throw', 'throw', 'rejects a file with no players'); }
+catch { eq('throw', 'throw', 'rejects a file with no players'); }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

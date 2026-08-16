@@ -28,15 +28,25 @@
   <!-- ============ left: players ============ -->
   <section class="panel panel--players">
     <div class="panel__head">
-      <h2>Players</h2>
+      <h2>Players <span id="playerCount" class="count"></span></h2>
       <div class="row-actions">
         <button id="btnAdd" class="btn btn--gold">+ Add player</button>
         <button id="btnSort" class="btn">Sort now</button>
+        <button id="btnJson" class="btn">Import JSON</button>
         <button id="btnSheet" class="btn">Google Form</button>
         <button id="btnImport" class="btn">Bulk paste</button>
         <button id="btnExport" class="btn">Export</button>
         <button id="btnClear" class="btn btn--danger">Clear</button>
       </div>
+    </div>
+
+    <div class="searchbar">
+      <svg class="searchbar__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>
+      </svg>
+      <input id="search" type="search" placeholder="Search players by name…" autocomplete="off" />
+      <button id="searchClear" class="searchbar__clear" title="Clear (Esc)" hidden>✕</button>
+      <span id="searchInfo" class="searchbar__info"></span>
     </div>
 
     <div class="tablewrap">
@@ -46,6 +56,7 @@
       </div>
       <div id="players" class="tbody"></div>
       <p class="empty" id="empty">No players yet — hit “+ Add player”.</p>
+      <p class="empty" id="noMatch" hidden>No player matches that search.</p>
     </div>
 
     <div class="hintbar">
@@ -96,10 +107,13 @@
     </section>
 
     <section class="panel">
-      <div class="panel__head"><h2>Show effects</h2></div>
+      <div class="panel__head"><h2>Show effects</h2>
+        <button id="btnNewFx" class="btn btn--sm">＋ New effect</button>
+      </div>
+      <div class="fxrack" id="fxRack"></div>
       <div class="grid2">
-        <button id="btnBooyah" class="btn btn--gold">🏆 BOOYAH!</button>
         <button id="btnReplay" class="btn">↻ Replay intro</button>
+        <button id="btnStopFx" class="btn">■ Clear screen</button>
       </div>
     </section>
 
@@ -181,6 +195,38 @@
   </div>
 </dialog>
 
+<!-- json file import -->
+<dialog id="dlgJson" class="dlg">
+  <h3>Import players from JSON</h3>
+  <p>Takes a board <b>Export</b> file, or any JSON list of players with
+     <code>name</code> and <code>score</code>. Tags are imported exactly as written — no shortening.</p>
+
+  <label class="drop" id="jsonDrop">
+    <input type="file" id="jsonFile" accept=".json,application/json" hidden />
+    <span class="drop__icon">⬆</span>
+    <span class="drop__text">Drop a <b>.json</b> file here, or click to choose one</span>
+    <span class="drop__name" id="jsonName"></span>
+  </label>
+
+  <div class="toggles dlg__opts">
+    <label><input type="radio" name="jsonMode" value="replace" checked /> Replace the list</label>
+    <label><input type="radio" name="jsonMode" value="add" /> Add to it</label>
+    <label><input type="checkbox" id="jsonSkipDupes" checked /> Skip duplicate names</label>
+  </div>
+  <label class="f f--row" id="jsonSettingsRow" hidden>
+    <span>Also restore the board settings from this file</span>
+    <input type="checkbox" id="jsonSettings" class="sw" />
+  </label>
+
+  <div class="sheetPreview" id="jsonPreview"></div>
+  <p class="error" id="jsonError"></p>
+
+  <div class="dlg__actions">
+    <button id="jsonCancel" class="btn">Cancel</button>
+    <button id="jsonGo" class="btn btn--gold" disabled>Import</button>
+  </div>
+</dialog>
+
 <!-- google form / sheets import -->
 <dialog id="dlgSheet" class="dlg dlg--wide">
   <h3>Import from Google Forms</h3>
@@ -213,12 +259,42 @@
   </div>
 </dialog>
 
-<dialog id="dlgBooyah" class="dlg">
-  <h3>Trigger BOOYAH</h3>
-  <label class="f"><span>Winner name shown on stream</span><input id="booyahName" /></label>
+<!-- custom effect creator -->
+<dialog id="dlgFx" class="dlg dlg--wide">
+  <h3 id="fxTitle">New effect</h3>
+  <p>Use <code>{top1}</code> for the current leader, <code>{top1score}</code> for their score,
+     and <code>{players}</code> for the head count — they fill in when it plays.</p>
+
+  <div class="grid2 dlg__cols">
+    <label class="f"><span>Button label</span><input id="fxLabel" maxlength="24" placeholder="Booyah" /></label>
+    <label class="f"><span>Style</span>
+      <select id="fxStyle">
+        <option value="burst">Burst — zoom in and out</option>
+        <option value="slam">Slam — drop from the top</option>
+        <option value="sweep">Sweep — slide across</option>
+        <option value="flash">Flash — strobe in place</option>
+        <option value="ticker">Ticker — scroll right to left</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="f"><span>Big text</span><input id="fxText" maxlength="40" placeholder="BOOYAH!" /></label>
+  <label class="f"><span>Small text under it</span><input id="fxSub" maxlength="60" placeholder="{top1}" /></label>
+
+  <div class="grid2 dlg__cols">
+    <label class="f"><span>Colour</span><input id="fxColor" type="color" /></label>
+    <label class="f"><span>Seconds on screen <em id="fxSecsVal"></em></span>
+      <input id="fxSecs" type="range" min="1" max="10" step="0.5" /></label>
+  </div>
+
+  <p class="error" id="fxError"></p>
+
   <div class="dlg__actions">
-    <button id="booyahCancel" class="btn">Cancel</button>
-    <button id="booyahGo" class="btn btn--gold">Fire it 🏆</button>
+    <button id="fxDelete" class="btn btn--danger" hidden>Delete</button>
+    <span class="spacer"></span>
+    <button id="fxTest" class="btn">▶ Test on overlay</button>
+    <button id="fxCancel" class="btn">Cancel</button>
+    <button id="fxSave" class="btn btn--gold">Save effect</button>
   </div>
 </dialog>
 

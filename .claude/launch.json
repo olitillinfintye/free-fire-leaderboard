@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server.js"],
       "port": 8080
+    },
+    {
+      "name": "scratch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js", "--port", "8090", "--data", "scratch-board.json"],
+      "port": 8090
     }
   ]
 }

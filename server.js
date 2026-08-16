@@ -46,6 +46,7 @@ const DEFAULT_STATE = {
     joinOpen: true,           // players may add themselves at /join
     joinUpper: false,         // force imported/joined names to UPPERCASE
     quickSteps: [100],        // amounts the control panel's +/- buttons add
+    effects: null,            // custom show effects; null seeds the defaults
   },
   players: [],
   rev: 0,
@@ -54,6 +55,29 @@ const DEFAULT_STATE = {
 const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const MAX_PLAYERS = 200;
+
+const EFFECT_STYLES = ['burst', 'slam', 'sweep', 'flash', 'ticker'];
+
+/** Effects the board starts with — editable and deletable like any other. */
+const DEFAULT_EFFECTS = [
+  { id: 'booyah', label: 'Booyah', text: 'BOOYAH!', sub: '{top1}', color: '#ffc400', style: 'burst', seconds: 3 },
+  { id: 'winner', label: 'Winner', text: '{top1}', sub: 'TAKES THE CROWN', color: '#ffc400', style: 'slam', seconds: 4 },
+  { id: 'final', label: 'Final round', text: 'FINAL ROUND', sub: '', color: '#ff3b30', style: 'sweep', seconds: 3 },
+];
+
+function normalizeEffects(input) {
+  const list = Array.isArray(input) ? input : DEFAULT_EFFECTS;
+  const out = list.slice(0, 12).map((e, i) => ({
+    id: typeof e?.id === 'string' && e.id ? e.id.slice(0, 40) : `fx${i}-${crypto.randomUUID().slice(0, 8)}`,
+    label: String(e?.label ?? 'Effect').slice(0, 24) || 'Effect',
+    text: String(e?.text ?? '').slice(0, 40),
+    sub: String(e?.sub ?? '').slice(0, 60),
+    color: /^#[0-9a-f]{3,8}$/i.test(String(e?.color)) ? e.color : '#ffc400',
+    style: EFFECT_STYLES.includes(e?.style) ? e.style : 'burst',
+    seconds: clamp(num(e?.seconds) || 3, 1, 15),
+  }));
+  return out.length ? out : DEFAULT_EFFECTS.map((e) => ({ ...e }));
+}
 
 let saveTimer = null;
 let state = load();
@@ -97,6 +121,7 @@ function normalize(raw) {
     .filter(Boolean)
     .slice(0, 4);
   if (!settings.quickSteps.length) settings.quickSteps = [100];
+  settings.effects = normalizeEffects(settings.effects);
   settings.scale = clamp(Number(settings.scale) || 1, 0.4, 3);
   settings.speed = clamp(Number(settings.speed) || 1, 0.25, 4);
 
