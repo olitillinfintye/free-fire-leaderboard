@@ -4,7 +4,7 @@
     {
       "name": "leaderboard",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js", "--key", "-VH40hiG"],
+      "runtimeArgs": ["server.js"],
       "port": 8080
     }
   ]
